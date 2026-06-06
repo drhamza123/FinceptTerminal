@@ -34,6 +34,7 @@ namespace fincept::screens {
 class DrawingObject;
 class IndicatorPane;
 class VolumeProfileLayer;
+class PolygonOverlay;
 class BarReplayEngine;
 class ChartAlertManager;
 class TimeSessionManager;
@@ -136,6 +137,9 @@ class MT5FleetChartPanel : public QWidget {
     // Date range
     void on_date_range_apply();
 
+  public:
+    void set_price(double price) { if (price_label_) price_label_->setText(QString("$%1").arg(price, 0, 'f', 2)); }
+
   private:
     void build_ui();
     void apply_theme();
@@ -170,6 +174,7 @@ class MT5FleetChartPanel : public QWidget {
 
     // Chart — CryptoChart with TradingView-like crosshair/OHLC tooltip
     QWidget* chart_container_ = nullptr;
+    QVBoxLayout* chart_col_ = nullptr;
     crypto::CryptoChart* crypto_chart_ = nullptr;
     QChartView* chart_view_ = nullptr;
     QChart* chart_ = nullptr;
@@ -214,6 +219,7 @@ class MT5FleetChartPanel : public QWidget {
     trading::SmartOrderEngine* order_engine_ = nullptr;
 
     // New subsystems
+    PolygonOverlay* polygon_overlay_ = nullptr;
     VolumeProfileLayer* volume_profile_ = nullptr;
     BarReplayEngine* replay_engine_ = nullptr;
     ChartAlertManager* alert_manager_ = nullptr;
@@ -251,6 +257,7 @@ class MT5FleetChartPanel : public QWidget {
     QPushButton* alert_btn_ = nullptr;
     QPushButton* bar_coloring_btn_ = nullptr;
     QPushButton* paper_trade_btn_ = nullptr;
+    QComboBox* paper_strategy_combo_ = nullptr;
     QPushButton* save_template_btn_ = nullptr;
     QPushButton* load_template_btn_ = nullptr;
     QPushButton* indicator_params_btn_ = nullptr;

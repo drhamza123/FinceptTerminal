@@ -27,12 +27,18 @@ async def lifespan(app: FastAPI):
     zmq_bridge = MT5ZMQBridge()
     await zmq_bridge.start()
     app.state.zmq_bridge = zmq_bridge
-    logger.info("Database initialized and MT5 TCP server + ZMQ bridge started.")
+
+    from app.services.polygon_ws import polygon_streamer
+    await polygon_streamer.start()
+
+    logger.info("Database initialized and MT5 TCP server + ZMQ bridge + Polygon started.")
     yield
     stop_poller()
     await stop_tcp_server()
     if hasattr(app.state, "zmq_bridge"):
         await app.state.zmq_bridge.stop()
+    from app.services.polygon_ws import polygon_streamer
+    await polygon_streamer.stop()
     logger.info("Shutting down.")
 
 

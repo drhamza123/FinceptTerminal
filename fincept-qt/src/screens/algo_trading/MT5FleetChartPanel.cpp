@@ -9,6 +9,7 @@
 #include "screens/algo_trading/TimeSessionMarker.h"
 #include "screens/algo_trading/EconomicEventMarker.h"
 #include "screens/algo_trading/IndicatorParamDialog.h"
+#include "screens/algo_trading/PolygonOverlay.h"
 #include "network/http/HttpClient.h"
 #include "ui/theme/Theme.h"
 
@@ -337,6 +338,17 @@ void MT5FleetChartPanel::build_ui() {
     connect(econ_btn_, &QPushButton::clicked, this, &MT5FleetChartPanel::on_econ_toggled);
     fl->addWidget(econ_btn_);
 
+    auto* polygon_btn = new QPushButton("Polygon", feat_bar); polygon_btn->setObjectName("chartToolBtn");
+    polygon_btn->setFixedHeight(20); polygon_btn->setCheckable(true);
+    connect(polygon_btn, &QPushButton::toggled, this, [this](bool checked) {
+        if (!polygon_overlay_) {
+            polygon_overlay_ = new PolygonOverlay(this, this);
+            chart_col_->addWidget(polygon_overlay_);
+        }
+        polygon_overlay_->setVisible(checked);
+    });
+    fl->addWidget(polygon_btn);
+
     alert_btn_ = new QPushButton("Alert", feat_bar); alert_btn_->setObjectName("chartToolBtn");
     alert_btn_->setFixedHeight(20);
     connect(alert_btn_, &QPushButton::clicked, this, &MT5FleetChartPanel::on_add_alert);
@@ -351,6 +363,11 @@ void MT5FleetChartPanel::build_ui() {
     paper_trade_btn_->setFixedHeight(20);
     connect(paper_trade_btn_, &QPushButton::clicked, this, &MT5FleetChartPanel::on_paper_trade);
     fl->addWidget(paper_trade_btn_);
+    paper_strategy_combo_ = new QComboBox(feat_bar);
+    paper_strategy_combo_->addItems({"EMA Crossover", "SMA Crossover", "RSI Strategy"});
+    paper_strategy_combo_->setFixedHeight(20);
+    paper_strategy_combo_->setStyleSheet("background:#1a1a2e;color:#e5e5e5;border:1px solid #2a2a3e;");
+    fl->addWidget(paper_strategy_combo_);
 
     indicator_params_btn_ = new QPushButton("Params", feat_bar); indicator_params_btn_->setObjectName("chartToolBtn");
     indicator_params_btn_->setFixedHeight(20);
@@ -436,9 +453,9 @@ void MT5FleetChartPanel::build_ui() {
     chart_wrap->setContentsMargins(0, 0, 0, 0);
     chart_wrap->setSpacing(0);
 
-    auto* chart_col = new QVBoxLayout();
-    chart_col->setContentsMargins(0, 0, 0, 0);
-    chart_col->setSpacing(1);
+    chart_col_ = new QVBoxLayout();
+    chart_col_->setContentsMargins(0, 0, 0, 0);
+    chart_col_->setSpacing(1);
 
     // CryptoChart — full TradingView-like chart with crosshair, OHLC tooltip,
     // price/time tags, timeframe buttons, wheel zoom, and drag pan.
@@ -451,12 +468,12 @@ void MT5FleetChartPanel::build_ui() {
     chart_view_->setContextMenuPolicy(Qt::CustomContextMenu);
     connect(chart_view_, &QWidget::customContextMenuRequested, this, &MT5FleetChartPanel::show_chart_context_menu);
 
-    chart_col->addWidget(crypto_chart_, 1);
+    chart_col_->addWidget(crypto_chart_, 1);
 
     indicator_pane_ = new IndicatorPane(chart_container_);
-    chart_col->addWidget(indicator_pane_);
+    chart_col_->addWidget(indicator_pane_);
 
-    chart_wrap->addLayout(chart_col, 1);
+    chart_wrap->addLayout(chart_col_, 1);
 
     volume_profile_ = new VolumeProfileLayer(chart_container_);
     volume_profile_->setFixedWidth(80);
@@ -1624,83 +1641,80 @@ void MT5FleetChartPanel::show_chart_context_menu(const QPoint& pos) {
 void MT5FleetChartPanel::on_paper_trade() {
     if (ohlc_data_.size() < 30) { tool_label_->setText("Need more data"); return; }
 
-    // Replicate Gold EA: EMA(9)/EMA(21) crossover, ATR(14) SL/TP
-    int fast = 9, slow = 21, atrPeriod = 14;
-    QVector<double> ema_fast(ohlc_data_.size(), 0), ema_slow(ohlc_data_.size(), 0);
+    QString strategy = paper_strategy_combo_ ? paper_strategy_combo_->currentText() : "EMA Crossover";
+    int fast = 9, slow = 21;
+    if (strategy == "SMA Crossover") { fast = 50; slow = 200; }
 
-    // Compute EMAs
-    double k_fast = 2.0 / (fast + 1), k_slow = 2.0 / (slow + 1);
-    ema_fast[0] = ohlc_data_[0].close;
-    ema_slow[0] = ohlc_data_[0].close;
-    for (int i = 1; i < ohlc_data_.size(); ++i) {
-        double c = ohlc_data_[i].close;
-        ema_fast[i] = c * k_fast + ema_fast[i-1] * (1 - k_fast);
-        ema_slow[i] = c * k_slow + ema_slow[i-1] * (1 - k_slow);
+    // Compute MAs
+    QVector<double> ma_fast(ohlc_data_.size(), 0), ma_slow(ohlc_data_.size(), 0);
+    if (strategy == "SMA Crossover") {
+        // Simple moving average
+        for (int i = 0; i < ohlc_data_.size(); ++i) {
+            double s_f = 0, s_s = 0;
+            int c_f = 0, c_s = 0;
+            for (int j = qMax(0, i - fast + 1); j <= i; ++j) { s_f += ohlc_data_[j].close; c_f++; }
+            for (int j = qMax(0, i - slow + 1); j <= i; ++j) { s_s += ohlc_data_[j].close; c_s++; }
+            ma_fast[i] = c_f > 0 ? s_f / c_f : ohlc_data_[i].close;
+            ma_slow[i] = c_s > 0 ? s_s / c_s : ohlc_data_[i].close;
+        }
+    } else {
+        // Exponential moving average
+        double k_f = 2.0 / (fast + 1), k_s = 2.0 / (slow + 1);
+        ma_fast[0] = ohlc_data_[0].close;
+        ma_slow[0] = ohlc_data_[0].close;
+        for (int i = 1; i < ohlc_data_.size(); ++i) {
+            double c = ohlc_data_[i].close;
+            ma_fast[i] = c * k_f + ma_fast[i-1] * (1 - k_f);
+            ma_slow[i] = c * k_s + ma_slow[i-1] * (1 - k_s);
+        }
     }
 
-    // Compute ATR
+    // ATR for SL/TP
     QVector<double> atr(ohlc_data_.size(), 0);
     double sum_tr = 0;
-    for (int i = 1; i <= atrPeriod && i < ohlc_data_.size(); ++i) {
+    for (int i = 1; i <= 14 && i < ohlc_data_.size(); ++i) {
         const auto& p = ohlc_data_[i];
         const auto& q = ohlc_data_[i-1];
         double tr = qMax(p.high - p.low, qMax(qAbs(p.high - q.close), qAbs(p.low - q.close)));
         sum_tr += tr;
         atr[i] = sum_tr / i;
     }
-    for (int i = atrPeriod + 1; i < ohlc_data_.size(); ++i) {
+    for (int i = 15; i < ohlc_data_.size(); ++i) {
         const auto& p = ohlc_data_[i];
         const auto& q = ohlc_data_[i-1];
         double tr = qMax(p.high - p.low, qMax(qAbs(p.high - q.close), qAbs(p.low - q.close)));
-        atr[i] = (atr[i-1] * (atrPeriod - 1) + tr) / atrPeriod;
+        atr[i] = (atr[i-1] * 13 + tr) / 14;
     }
 
     // Generate signals
     QVector<OrderMarker> markers;
     double balance = 100000, peak = balance, dd = 0;
     int wins = 0, losses = 0;
-    bool in_position = false;
+    bool in_pos = false;
     double entry_price = 0, entry_time = 0;
     QString entry_side;
     double gross_pnl = 0;
 
     for (int i = slow + 1; i < ohlc_data_.size(); ++i) {
-        double f0 = ema_fast[i], f1 = ema_fast[i-1];
-        double s0 = ema_slow[i], s1 = ema_slow[i-1];
+        double f0 = ma_fast[i], f1 = ma_fast[i-1];
+        double s0 = ma_slow[i], s1 = ma_slow[i-1];
         double a = atr[i];
         bool buy = (f1 <= s1 && f0 > s0);
         bool sell = (f1 >= s1 && f0 < s0);
 
-        if (buy && !in_position) {
+        if (buy && !in_pos) {
             entry_price = ohlc_data_[i].close;
             entry_time = ohlc_data_[i].time;
             entry_side = "BUY";
-            in_position = true;
-
-            OrderMarker m;
-            m.time = static_cast<qint64>(entry_time);
-            m.price = entry_price;
-            m.side = "BUY";
-            m.label = "Entry";
-            m.lot = 1.0;
-            markers.append(m);
-        }
-        else if (sell && !in_position) {
+            in_pos = true;
+            markers.append({static_cast<qint64>(entry_time), entry_price, "BUY", "Entry", 1.0});
+        } else if (sell && !in_pos) {
             entry_price = ohlc_data_[i].close;
             entry_time = ohlc_data_[i].time;
             entry_side = "SELL";
-            in_position = true;
-
-            OrderMarker m;
-            m.time = static_cast<qint64>(entry_time);
-            m.price = entry_price;
-            m.side = "SELL";
-            m.label = "Entry";
-            m.lot = 1.0;
-            markers.append(m);
-        }
-        else if (in_position) {
-            // Check exit: opposite signal or ATR-based SL/TP
+            in_pos = true;
+            markers.append({static_cast<qint64>(entry_time), entry_price, "SELL", "Entry", 1.0});
+        } else if (in_pos) {
             double exit_price = 0;
             QString exit_reason;
             double atr_sl = a * 1.5;
@@ -1746,7 +1760,7 @@ void MT5FleetChartPanel::on_paper_trade() {
                 m.lot = 1.0;
                 markers.append(m);
 
-                in_position = false;
+                in_pos = false;
             }
         }
     }

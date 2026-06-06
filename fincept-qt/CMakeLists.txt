@@ -1664,6 +1664,7 @@ set(SCREEN_SOURCES
     src/screens/algo_trading/MT5FleetMarketWatchPanel.cpp
     src/screens/algo_trading/MT5FleetEcoCalendarPanel.cpp
     src/screens/algo_trading/MT5FleetChartTile.cpp
+    src/screens/algo_trading/PolygonOverlay.cpp
     src/screens/algo_trading/IndicatorPane.cpp
     src/screens/algo_trading/ChartTypeTransform.cpp
     src/screens/algo_trading/VolumeProfileLayer.cpp
@@ -1674,6 +1675,7 @@ set(SCREEN_SOURCES
     src/screens/algo_trading/IndicatorParamDialog.cpp
     src/screens/algo_trading/MT5FleetMultiChartContainer.cpp
     src/screens/algo_trading/PriceAlertDialog.cpp
+    src/screens/algo_trading/PolygonOverlay.cpp
 
     # Data Mapping (partial-class split; see DataMappingScreen.cpp header).
     src/screens/data_mapping/DataMappingScreen.cpp

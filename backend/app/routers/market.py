@@ -146,3 +146,58 @@ async def market_search(
         results = [r for r in results if r["type"] == type_filter]
 
     return {"success": True, "message": "OK", "data": results[:limit]}
+
+
+# ── Polygon.io Real-Time Data ─────────────────────────────────────
+
+from fastapi import WebSocket, WebSocketDisconnect
+from app.services.polygon_ws import polygon_streamer
+import asyncio
+
+polygon_ui_clients: set = set()
+
+@router.websocket("/ws/polygon")
+async def polygon_ws(ws: WebSocket):
+    await ws.accept()
+    polygon_ui_clients.add(ws)
+    polygon_streamer.on_data(lambda msg: asyncio.ensure_future(
+        _bcast_polygon(msg)
+    ))
+    try:
+        while True:
+            data = await ws.receive_json()
+            action = data.get("action", "")
+            symbols = data.get("symbols", [])
+            channel = data.get("channel", "T")
+            if action == "subscribe":
+                await polygon_streamer.subscribe(symbols, channel)
+                await ws.send_json({"status": "subscribed", "symbols": symbols, "channel": channel})
+            elif action == "unsubscribe":
+                await polygon_streamer.unsubscribe(symbols, channel)
+    except WebSocketDisconnect:
+        pass
+    finally:
+        polygon_ui_clients.discard(ws)
+
+async def _bcast_polygon(msg: dict):
+    dead = set()
+    for c in polygon_ui_clients:
+        try:
+            await c.send_json(msg)
+        except Exception:
+            dead.add(c)
+    polygon_ui_clients.difference_update(dead)
+
+
+@router.post("/polygon/subscribe")
+async def polygon_subscribe(body: dict):
+    symbols = body.get("symbols", ["AAPL", "MSFT"])
+    channel = body.get("channel", "T")
+    await polygon_streamer.subscribe(symbols, channel)
+    return {"status": "subscribed", "symbols": symbols, "channel": channel}
+
+@router.post("/polygon/unsubscribe")
+async def polygon_unsubscribe(body: dict):
+    symbols = body.get("symbols", [])
+    await polygon_streamer.unsubscribe(symbols)
+    return {"status": "unsubscribed"}
