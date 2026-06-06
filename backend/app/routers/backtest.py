@@ -760,6 +760,35 @@ async def walk_forward_optimization(body: dict, user: User = Depends(resolve_use
     }}
 
 
+@router.post("/backtest/scan")
+async def scan_strategies(body: dict, user=Depends(resolve_user)):
+    """Auto-scan all symbols × strategies × timeframes × parameters."""
+    from app.services.strategy_scanner import scanner
+    capital = body.get("capital", 100000)
+    start = body.get("start_date", "2026-01-01")
+    end = body.get("end_date", "2026-06-01")
+
+    results = await scanner.scan_all(capital, start, end)
+    top = [vars(r) for r in scanner.top_n(20)]
+    portfolio = [vars(r) for r in scanner.best_portfolio(5)]
+
+    return {"success": True, "data": {
+        "total_tested": len(results),
+        "top_results": top,
+        "best_portfolio": portfolio,
+    }}
+
+
+@router.post("/backtest/scan/generate-ea")
+async def generate_ea_from_scan(body: dict, user=Depends(resolve_user)):
+    """Generate MQL5 EA from a specific scan result."""
+    from app.services.strategy_scanner import ScanResult
+    sr = ScanResult(**body)
+    sr.compute_score()
+    code = scanner.generate_mql5(sr)
+    return {"success": True, "data": {"mql5_code": code, "strategy": vars(sr)}}
+
+
 @router.websocket("/backtest/ws/tick-replay")
 async def tick_replay_ws(ws: WebSocket):
     await ws.accept()
