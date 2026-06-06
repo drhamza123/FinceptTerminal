@@ -112,52 +112,43 @@ QFont scene_font() {
 } // namespace
 
 // ── HoverChartView ──────────────────────────────────────────────────────────
-// Custom QChartView that forwards mouse-move events to the parent CryptoChart
-// so the crosshair / OHLC tooltip can update without subclassing the chart
-// itself. Also enables wheel-zoom on the price axis and drag-pan.
-class HoverChartView : public QChartView {
-  public:
-    HoverChartView(QChart* chart, CryptoChart* host)
-        : QChartView(chart), host_(host) {
-        setMouseTracking(true);
-        setRenderHint(QPainter::Antialiasing, true);
-        setHorizontalScrollBarPolicy(Qt::ScrollBarAlwaysOff);
-        setVerticalScrollBarPolicy(Qt::ScrollBarAlwaysOff);
-        setRubberBand(QChartView::NoRubberBand);
-        setDragMode(QGraphicsView::NoDrag);
-    }
 
-  protected:
-    void mouseMoveEvent(QMouseEvent* e) override {
-        if (host_ && chart()) {
-            const QPointF chart_pos = chart()->mapToValue(e->pos());
-            host_->on_hover_position(chart_pos, e->pos());
-        }
-        QChartView::mouseMoveEvent(e);
-    }
-    void leaveEvent(QEvent* e) override {
-        if (host_) host_->on_hover_leave();
-        QChartView::leaveEvent(e);
-    }
-    void wheelEvent(QWheelEvent* e) override {
-        if (!chart()) {
-            QChartView::wheelEvent(e);
-            return;
-        }
-        // Zoom price axis only. Wheel-panning the time axis collides with the
-        // candle stream — users expect Time fixed and Price scaled.
-        const double factor = (e->angleDelta().y() > 0) ? 0.9 : 1.1;
-        if (auto* y = qobject_cast<QValueAxis*>(host_ ? host_->price_axis_ : nullptr)) {
-            const double mid = (y->min() + y->max()) / 2.0;
-            const double span = (y->max() - y->min()) * factor;
-            y->setRange(mid - span / 2.0, mid + span / 2.0);
-        }
-        e->accept();
-    }
+HoverChartView::HoverChartView(QChart* chart, CryptoChart* host)
+    : QChartView(chart), host_(host) {
+    setMouseTracking(true);
+    setRenderHint(QPainter::Antialiasing, true);
+    setHorizontalScrollBarPolicy(Qt::ScrollBarAlwaysOff);
+    setVerticalScrollBarPolicy(Qt::ScrollBarAlwaysOff);
+    setRubberBand(QChartView::NoRubberBand);
+    setDragMode(QGraphicsView::NoDrag);
+}
 
-  private:
-    CryptoChart* host_ = nullptr;
-};
+void HoverChartView::mouseMoveEvent(QMouseEvent* e) {
+    if (host_ && chart()) {
+        const QPointF chart_pos = chart()->mapToValue(e->pos());
+        host_->on_hover_position(chart_pos, e->pos());
+    }
+    QChartView::mouseMoveEvent(e);
+}
+
+void HoverChartView::leaveEvent(QEvent* e) {
+    if (host_) host_->on_hover_leave();
+    QChartView::leaveEvent(e);
+}
+
+void HoverChartView::wheelEvent(QWheelEvent* e) {
+    if (!chart()) {
+        QChartView::wheelEvent(e);
+        return;
+    }
+    const double factor = (e->angleDelta().y() > 0) ? 0.9 : 1.1;
+    if (auto* y = qobject_cast<QValueAxis*>(host_ ? host_->price_axis_ : nullptr)) {
+        const double mid = (y->min() + y->max()) / 2.0;
+        const double span = (y->max() - y->min()) * factor;
+        y->setRange(mid - span / 2.0, mid + span / 2.0);
+    }
+    e->accept();
+}
 
 // ── CryptoChart ─────────────────────────────────────────────────────────────
 

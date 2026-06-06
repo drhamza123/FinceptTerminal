@@ -27,6 +27,7 @@
 #include "screens/algo_trading/ChartTypeTransform.h"
 #include "screens/algo_trading/IndicatorParamDialog.h"
 #include "trading/SmartOrderEngine.h"
+#include "screens/crypto_trading/CryptoChart.h"
 
 namespace fincept::screens {
 
@@ -147,6 +148,11 @@ class MT5FleetChartPanel : public QWidget {
     void add_oscillator_indicator(const QString& name);
     void clear_indicators();
     void set_active_tool(const QString& toolName);
+
+  protected:
+    bool eventFilter(QObject* obj, QEvent* event) override;
+
+  private:
     void handle_object_placed(QPointF start, QPointF end);
     void handle_point_placed(QPointF pt);
     void handle_drawing_finished();
@@ -162,9 +168,10 @@ class MT5FleetChartPanel : public QWidget {
     void setup_shortcuts();
     void show_chart_context_menu(const QPoint& pos);
 
-    // Chart
+    // Chart — CryptoChart with TradingView-like crosshair/OHLC tooltip
     QWidget* chart_container_ = nullptr;
-    DrawingChartView* chart_view_ = nullptr;
+    crypto::CryptoChart* crypto_chart_ = nullptr;
+    QChartView* chart_view_ = nullptr;
     QChart* chart_ = nullptr;
     IndicatorPane* indicator_pane_ = nullptr;
     // Crosshair overlay items (like CryptoChart)

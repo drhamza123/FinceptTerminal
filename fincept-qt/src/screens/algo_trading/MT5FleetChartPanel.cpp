@@ -440,50 +440,18 @@ void MT5FleetChartPanel::build_ui() {
     chart_col->setContentsMargins(0, 0, 0, 0);
     chart_col->setSpacing(1);
 
-    chart_ = new QChart();
-    chart_->setAnimationOptions(QChart::SeriesAnimations);
-    chart_->legend()->hide();
-    chart_->setBackgroundBrush(QBrush(QColor(ui::colors::BG_BASE())));
-    chart_->setPlotAreaBackgroundBrush(QBrush(QColor(ui::colors::BG_BASE())));
-    chart_->setPlotAreaBackgroundVisible(true);
+    // CryptoChart — full TradingView-like chart with crosshair, OHLC tooltip,
+    // price/time tags, timeframe buttons, wheel zoom, and drag pan.
+    crypto_chart_ = new crypto::CryptoChart(chart_container_);
+    chart_ = crypto_chart_->chart();
+    chart_view_ = qobject_cast<QChartView*>(crypto_chart_->chartView());
 
-    chart_view_ = new DrawingChartView(chart_, chart_container_);
-    chart_view_->setObjectName("chartView");
+    // Event filter for drawing tools + context menu
+    chart_view_->installEventFilter(this);
     chart_view_->setContextMenuPolicy(Qt::CustomContextMenu);
     connect(chart_view_, &QWidget::customContextMenuRequested, this, &MT5FleetChartPanel::show_chart_context_menu);
-    connect(chart_view_, &DrawingChartView::objectPlaced, this, &MT5FleetChartPanel::handle_object_placed);
-    connect(chart_view_, &DrawingChartView::pointPlaced, this, &MT5FleetChartPanel::handle_point_placed);
-    connect(chart_view_, &DrawingChartView::drawingFinished, this, &MT5FleetChartPanel::handle_drawing_finished);
-    connect(chart_view_, &DrawingChartView::mouseMoved, this, &MT5FleetChartPanel::on_hover_position);
-    chart_col->addWidget(chart_view_, 1);
 
-    // Crosshair overlay items (like CryptoChart)
-    auto* scene = chart_view_->scene();
-    QPen xhairPen(QColor(180, 180, 180, 140), 1, Qt::DashLine);
-    xhair_v_ = scene->addLine(QLineF(), xhairPen);
-    xhair_h_ = scene->addLine(QLineF(), xhairPen);
-    xhair_v_->setZValue(20); xhair_v_->setVisible(false);
-    xhair_h_->setZValue(20); xhair_h_->setVisible(false);
-    xhair_dot_ = scene->addEllipse(QRectF(-3,-3,6,6), QPen(QColor(255,200,100),1), QBrush(QColor(15,15,30)));
-    xhair_dot_->setZValue(23); xhair_dot_->setVisible(false);
-
-    auto buildTag = [&](QGraphicsRectItem*& bg, QGraphicsSimpleTextItem*& txt, const QColor& fill, const QColor& textCol) {
-        bg = scene->addRect(QRectF(), QPen(Qt::NoPen), QBrush(fill));
-        bg->setZValue(21); bg->setVisible(false);
-        txt = scene->addSimpleText(QString());
-        txt->setBrush(QBrush(textCol));
-        txt->setFont(QFont("Consolas", 8, QFont::DemiBold));
-        txt->setZValue(22); txt->setVisible(false);
-    };
-    buildTag(price_tag_bg_, price_tag_txt_, QColor(30,30,50), QColor(230,230,230));
-    buildTag(time_tag_bg_, time_tag_txt_, QColor(30,30,50), QColor(230,230,230));
-    buildTag(last_tag_bg_, last_tag_txt_, QColor(255,200,100), QColor(15,15,30));
-
-    // OHLC tooltip (QLabel pinned to top-left of chart)
-    ohlc_tooltip_ = new QLabel(chart_view_);
-    ohlc_tooltip_->setVisible(false);
-    ohlc_tooltip_->setAttribute(Qt::WA_TransparentForMouseEvents);
-    ohlc_tooltip_->move(12, 12);
+    chart_col->addWidget(crypto_chart_, 1);
 
     indicator_pane_ = new IndicatorPane(chart_container_);
     chart_col->addWidget(indicator_pane_);
@@ -594,7 +562,7 @@ void MT5FleetChartPanel::load_chart_data() {
             ohlc_data_.clear();
             chart_data_.clear();
             transformed_data_.clear();
-            chart_->removeAllSeries();
+            crypto_chart_->clear();
             qDeleteAll(indicator_series_); indicator_series_.clear();
             qDeleteAll(order_marker_series_); order_marker_series_.clear();
             for (auto* t : order_text_items_) { chart_->scene()->removeItem(t); delete t; }
@@ -636,107 +604,25 @@ void MT5FleetChartPanel::load_chart_data() {
             apply_chart_type_transform();
             const auto& display_data = transformed_data_.isEmpty() ? src : transformed_data_;
 
-            // Render main chart series
-            switch (chart_style_) {
-                case ChartStyle::Candlestick: {
-                    candlestick_series_ = new QCandlestickSeries();
-                    candlestick_series_->setName(current_symbol_);
-                    candlestick_series_->setIncreasingColor(QColor(ui::colors::POSITIVE()));
-                    candlestick_series_->setDecreasingColor(QColor(ui::colors::NEGATIVE()));
-                    candlestick_series_->setBodyWidth(0.7);
-                    candlestick_series_->setPen(QPen(QColor(120,120,120), 1));
-                    for (const auto& pt : display_data) {
-                        auto* set = new QCandlestickSet(pt.open, pt.high, pt.low, pt.close, pt.time);
-                        if (bar_coloring_enabled_) {
-                            qreal range = pt.high - pt.low;
-                            qreal body = qAbs(pt.close - pt.open);
-                            if (range > 0 && body / range > 0.7) {
-                                set->setBrush(QColor(pt.close > pt.open ? 255 : 255, 80, 80, 200));
-                                set->setPen(QPen(Qt::NoPen));
-                            }
-                        }
-                        candlestick_series_->append(set);
-                    }
-                    chart_->addSeries(candlestick_series_);
-                    break;
+            // Push data to CryptoChart — full TradingView-like rendering, crosshair,
+            // OHLC tooltip, price/time tags, wheel zoom, drag pan.
+            if (crypto_chart_) {
+                QVector<trading::Candle> candles;
+                candles.reserve(display_data.size());
+                for (const auto& pt : display_data) {
+                    trading::Candle c;
+                    c.timestamp = static_cast<int64_t>(pt.time);
+                    c.open = pt.open; c.high = pt.high;
+                    c.low = pt.low; c.close = pt.close; c.volume = pt.volume;
+                    candles.append(c);
                 }
-                case ChartStyle::Bar: {
-                    price_series_ = new QLineSeries();
-                    price_series_->setPen(QPen(QColor(100,180,255), 1));
-                    for (const auto& pt : display_data) price_series_->append(pt.time, pt.close);
-                    chart_->addSeries(price_series_);
-                    break;
-                }
-                case ChartStyle::Line: {
-                    price_series_ = new QLineSeries();
-                    price_series_->setPen(QPen(QColor(100,180,255), 1.5));
-                    for (const auto& pt : display_data) price_series_->append(pt.time, pt.close);
-                    chart_->addSeries(price_series_);
-                    break;
-                }
-                case ChartStyle::Area: {
-                    auto* line_s = new QLineSeries();
-                    auto* upper = new QLineSeries();
-                    for (const auto& pt : display_data) {
-                        line_s->append(pt.time, pt.close);
-                        upper->append(pt.time, pt.close);
-                    }
-                    auto* area = new QAreaSeries(line_s, upper);
-                    area->setColor(QColor(100, 180, 255, 50));
-                    area->setBorderColor(QColor(100, 180, 255));
-                    chart_->addSeries(area);
-                    break;
-                }
-            }
-
-            // Recompute min/max from display data
-            min_p = 1e9; max_p = 0;
-            for (const auto& pt : display_data) {
-                min_p = qMin(min_p, pt.low);
-                max_p = qMax(max_p, pt.high);
-            }
-
-            // Price axis
-            double pad = (max_p - min_p) * 0.12;
-            if (log_scale_enabled_) {
-                auto* logAxis = new QLogValueAxis();
-                logAxis->setLabelFormat("%.2f");
-                logAxis->setBase(10.0);
-                logAxis->setRange(qMax(0.1, min_p - pad), max_p + pad);
-                logAxis->setLabelsColor(QColor(ui::colors::TEXT_TERTIARY()));
-                logAxis->setGridLineColor(QColor(ui::colors::BORDER_DIM()));
-                chart_->addAxis(logAxis, Qt::AlignLeft);
-                axis_y_ = logAxis;
-            } else {
-                auto* valAxis = new QValueAxis();
-                valAxis->setRange(min_p - pad, max_p + pad);
-                valAxis->setLabelFormat("%.2f");
-                valAxis->setLabelsColor(QColor(ui::colors::TEXT_TERTIARY()));
-                valAxis->setGridLineColor(QColor(ui::colors::BORDER_DIM()));
-                chart_->addAxis(valAxis, Qt::AlignLeft);
-                axis_y_ = valAxis;
-            }
-
-            // Time axis
-            axis_x_ = new QDateTimeAxis();
-            axis_x_->setFormat("dd HH:mm");
-            axis_x_->setTickCount(8);
-            axis_x_->setLabelsColor(QColor(ui::colors::TEXT_TERTIARY()));
-            axis_x_->setGridLineColor(QColor(ui::colors::BORDER_DIM()));
-            axis_x_->setRange(QDateTime::fromMSecsSinceEpoch(static_cast<qint64>(min_t)),
-                              QDateTime::fromMSecsSinceEpoch(static_cast<qint64>(max_t)));
-            chart_->addAxis(axis_x_, Qt::AlignBottom);
-
-            for (auto* s : chart_->series()) {
-                if (s == volume_bars_) continue;
-                s->attachAxis(axis_x_);
-                s->attachAxis(axis_y_);
+                crypto_chart_->set_candles(candles);
+                axis_x_ = qobject_cast<QDateTimeAxis*>(crypto_chart_->chart()->axisX());
+                axis_y_ = crypto_chart_->chart()->axisY();
             }
 
             render_volume_bars();
             render_price_line();
-
-            // Last-price tag (always-visible on right axis, like CryptoChart)
             update_last_price_marker();
 
             if (!order_markers_.isEmpty()) render_order_markers();
@@ -1122,7 +1008,7 @@ void MT5FleetChartPanel::set_active_tool(const QString& toolName) {
     is_elliott_mode_ = (toolName == "Elliott Wave");
     is_text_label_mode_ = (toolName == "Text");
     tool_label_->setText(toolName);
-    chart_view_->setActiveTool(toolName);
+    chart_view_->setCursor(toolName == "None" ? Qt::ArrowCursor : Qt::CrossCursor);
     if (is_elliott_mode_) {
         elliott_points_.clear();
         tool_label_->setText("EW: click points, press Undo to finish");
@@ -1697,6 +1583,34 @@ void MT5FleetChartPanel::refresh_positions() {
                 .arg(ohlc_data_.isEmpty() ? 0 : ohlc_data_.last().close, 0, 'f', 2)
                 .arg(total_pnl, 0, 'f', 0));
         }, this);
+}
+
+// ── Event Filter (drawing tools on CryptoChart) ─────────────────
+
+bool MT5FleetChartPanel::eventFilter(QObject* obj, QEvent* event) {
+    if (obj == chart_view_ && active_tool_name_ != "None") {
+        if (event->type() == QEvent::MouseButtonPress) {
+            auto* me = static_cast<QMouseEvent*>(event);
+            if (me->button() == Qt::LeftButton) {
+                QPointF chartPt = chart_->mapToValue(me->position());
+                if (active_tool_name_ == "Elliott Wave" || active_tool_name_ == "Text") {
+                    handle_point_placed(chartPt);
+                } else {
+                    is_placing_ = true;
+                    last_start_ = chartPt;
+                }
+            }
+        } else if (event->type() == QEvent::MouseButtonRelease && is_placing_) {
+            auto* me = static_cast<QMouseEvent*>(event);
+            if (me->button() == Qt::LeftButton) {
+                is_placing_ = false;
+                QPointF endPt = chart_->mapToValue(me->position());
+                handle_object_placed(last_start_, endPt);
+                handle_drawing_finished();
+            }
+        }
+    }
+    return QWidget::eventFilter(obj, event);
 }
 
 // ── Context Menu ─────────────────────────────────────────────────

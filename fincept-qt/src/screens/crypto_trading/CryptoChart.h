@@ -9,7 +9,6 @@
 #include <QVector>
 #include <QWidget>
 
-class QChartView;
 class QChart;
 class QCandlestickSeries;
 class QLineSeries;
@@ -20,12 +19,24 @@ class QGraphicsRectItem;
 class QGraphicsEllipseItem;
 class QGraphicsSimpleTextItem;
 class QLabel;
+class QWheelEvent;
 
 namespace fincept::ui { class IndicatorPicker; }
 
 namespace fincept::screens::crypto {
 
-class HoverChartView; // forward; defined in the .cpp
+class CryptoChart;
+
+class HoverChartView : public QChartView {
+  public:
+    HoverChartView(QChart* chart, CryptoChart* host);
+  protected:
+    void mouseMoveEvent(QMouseEvent* e) override;
+    void leaveEvent(QEvent* e) override;
+    void wheelEvent(QWheelEvent* e) override;
+  private:
+    CryptoChart* host_ = nullptr;
+};
 
 class CryptoChart : public QWidget {
     Q_OBJECT
@@ -38,6 +49,8 @@ class CryptoChart : public QWidget {
 
     QString current_timeframe() const;
     fincept::ui::ChartOverlayManager* overlay_manager() const { return overlay_mgr_; }
+    QChart* chart() const { return chart_; }
+    QWidget* chartView() const { return chart_view_; }
 
   signals:
     void timeframe_changed(const QString& tf);
@@ -54,6 +67,7 @@ class CryptoChart : public QWidget {
     HoverChartView* chart_view_ = nullptr;
     QChart* chart_ = nullptr;
     QCandlestickSeries* series_ = nullptr;
+    friend class HoverChartView;
     QDateTimeAxis* time_axis_ = nullptr;
     QValueAxis* price_axis_ = nullptr;
     QLineSeries* last_price_line_ = nullptr;
