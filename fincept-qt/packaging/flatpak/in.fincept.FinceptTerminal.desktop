@@ -1,0 +1,14 @@
+[Desktop Entry]
+Version=1.0
+Type=Application
+Name=AI Stock Guardian
+GenericName=Financial Intelligence Terminal
+Comment=Professional financial data terminal with AI analytics, trading, and market data
+Exec=FinceptTerminal %U
+Icon=com.guardian.AIStockGuardian
+Terminal=false
+StartupWMClass=FinceptTerminal
+StartupNotify=true
+Categories=Finance;Office;Science;
+MimeType=application/x-guardian;
+Keywords=finance;trading;stocks;crypto;portfolio;AI;analytics;markets;
