@@ -1,0 +1,38 @@
+//@version=5
+strategy("Gold EMA Crossover — FinceptTerminal Comparison", overlay=true,
+         initial_capital=10000, default_qty_type=strategy.percent_of_equity,
+         default_qty_value=2, commission_type=strategy.commission.cash_per_contract,
+         commission_value=7, slippage=30)
+
+// === Parameters (matches GoldBacktestEA.mq5 exactly) ===
+fast_len = input.int(9, "Fast EMA")
+slow_len = input.int(21, "Slow EMA")
+atr_len = input.int(14, "ATR Period")
+atr_sl_mult = input.float(1.5, "SL Multiplier")
+atr_tp_mult = input.float(3.0, "TP Multiplier")
+
+// === Indicators ===
+fast_ema = ta.ema(close, fast_len)
+slow_ema = ta.ema(close, slow_len)
+atr_val = ta.atr(atr_len)
+
+// === Signals (cross detected on bar close) ===
+buy_signal = ta.crossover(fast_ema, slow_ema)
+sell_signal = ta.crossunder(fast_ema, slow_ema)
+
+// === Entry ===
+if buy_signal
+    strategy.entry("Long", strategy.long)
+    strategy.exit("Long Exit", "Long",
+         stop=close - atr_val * atr_sl_mult,
+         limit=close + atr_val * atr_tp_mult)
+
+if sell_signal
+    strategy.entry("Short", strategy.short)
+    strategy.exit("Short Exit", "Short",
+         stop=close + atr_val * atr_sl_mult,
+         limit=close - atr_val * atr_tp_mult)
+
+// === Plot ===
+plot(fast_ema, "Fast EMA", color=color.green)
+plot(slow_ema, "Slow EMA", color=color.red)
