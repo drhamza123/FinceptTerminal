@@ -39,9 +39,12 @@ async def _proxy_to_llm(messages: list, model: str | None = None, max_tokens: in
 
     async with httpx.AsyncClient(timeout=120.0) as client:
         try:
+            headers = {"Content-Type": "application/json"}
+            if api_key and api_key != "ollama":
+                headers["Authorization"] = f"Bearer {api_key}"
             resp = await client.post(
                 f"{base_url}/chat/completions",
-                headers={"Authorization": f"Bearer {api_key}", "Content-Type": "application/json"},
+                headers=headers,
                 json={"model": model, "messages": messages, "max_tokens": max_tokens, "temperature": temperature},
             )
             resp.raise_for_status()
@@ -53,6 +56,17 @@ async def _proxy_to_llm(messages: list, model: str | None = None, max_tokens: in
                     "message": {"content": f"Guardian AI error: {e}"}
                 }]
             }
+
+
+@router.post("/v1/chat/completions")
+async def openai_proxy(body: dict):
+    """OpenAI-compatible proxy that forwards to Ollama."""
+    return await _proxy_to_llm(
+        body.get("messages", []),
+        body.get("model", settings.LLM_DEFAULT_MODEL),
+        body.get("max_tokens", 4096),
+        body.get("temperature", 0.7),
+    )
 
 
 @router.post("/research/chat")

@@ -499,16 +499,20 @@ Rules:
     try:
         import httpx
         from app.config import settings
-        api_key = os.environ.get("LLM_PROVIDER_API_KEY", "")
-        base_url = os.environ.get("LLM_PROVIDER_BASE_URL", settings.LLM_PROVIDER_BASE_URL)
+        api_key = settings.LLM_PROVIDER_API_KEY or os.environ.get("LLM_PROVIDER_API_KEY", "")
+        base_url = settings.LLM_PROVIDER_BASE_URL or os.environ.get("LLM_PROVIDER_BASE_URL", "")
 
         if not api_key:
             return {"success": True, "data": {"mql5_code": MQL5_GENERATED_PLACEHOLDER, "estimated_lines": 30, "warnings": ["No LLM_API_KEY set — using template. Set LLM_PROVIDER_API_KEY for AI generation."]}}
 
+        req_headers = {"Content-Type": "application/json"}
+        if api_key and api_key != "ollama":
+            req_headers["Authorization"] = f"Bearer {api_key}"
+
         async with httpx.AsyncClient(timeout=60) as client:
             resp = await client.post(
                 f"{base_url}/chat/completions",
-                headers={"Authorization": f"Bearer {api_key}", "Content-Type": "application/json"},
+                headers=req_headers,
                 json={"model": "gpt-4", "messages": [
                     {"role": "system", "content": system},
                     {"role": "user", "content": prompt}
@@ -548,16 +552,20 @@ Make both functionally identical: same logic, same parameters, same entry/exit r
     try:
         import httpx
         from app.config import settings
-        api_key = os.environ.get("LLM_PROVIDER_API_KEY", "")
-        base_url = os.environ.get("LLM_PROVIDER_BASE_URL", settings.LLM_PROVIDER_BASE_URL)
+        api_key = settings.LLM_PROVIDER_API_KEY or os.environ.get("LLM_PROVIDER_API_KEY", "")
+        base_url = settings.LLM_PROVIDER_BASE_URL or os.environ.get("LLM_PROVIDER_BASE_URL", "")
 
         if not api_key:
             return {"success": False, "error": "Set LLM_PROVIDER_API_KEY in .env"}
 
+        req_headers = {"Content-Type": "application/json"}
+        if api_key and api_key != "ollama":
+            req_headers["Authorization"] = f"Bearer {api_key}"
+
         async with httpx.AsyncClient(timeout=60) as client:
             resp = await client.post(
                 f"{base_url}/chat/completions",
-                headers={"Authorization": f"Bearer {api_key}", "Content-Type": "application/json"},
+                headers=req_headers,
                 json={"model": "gpt-4", "messages": [
                     {"role": "system", "content": system},
                     {"role": "user", "content": prompt}
