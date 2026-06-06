@@ -10,6 +10,7 @@
 #include "screens/algo_trading/EconomicEventMarker.h"
 #include "screens/algo_trading/IndicatorParamDialog.h"
 #include "screens/algo_trading/PolygonOverlay.h"
+#include "screens/algo_trading/ExecutionPanel.h"
 #include "network/http/HttpClient.h"
 #include "ui/theme/Theme.h"
 
@@ -349,6 +350,18 @@ void MT5FleetChartPanel::build_ui() {
     });
     fl->addWidget(polygon_btn);
 
+    auto* exec_btn = new QPushButton("Execute", feat_bar); exec_btn->setObjectName("chartToolBtn");
+    exec_btn->setFixedHeight(20); exec_btn->setCheckable(true);
+    connect(exec_btn, &QPushButton::toggled, this, [this](bool checked) {
+        if (!exec_panel_) {
+            exec_panel_ = new ExecutionPanel(this, chart_container_);
+            chart_wrap_->addWidget(exec_panel_);
+        }
+        exec_panel_->setVisible(checked);
+        if (checked) exec_panel_->raise();
+    });
+    fl->addWidget(exec_btn);
+
     alert_btn_ = new QPushButton("Alert", feat_bar); alert_btn_->setObjectName("chartToolBtn");
     alert_btn_->setFixedHeight(20);
     connect(alert_btn_, &QPushButton::clicked, this, &MT5FleetChartPanel::on_add_alert);
@@ -449,9 +462,9 @@ void MT5FleetChartPanel::build_ui() {
 
     // Chart container (holds main chart + indicator pane + volume profile)
     chart_container_ = new QWidget(this);
-    auto* chart_wrap = new QHBoxLayout(chart_container_);
-    chart_wrap->setContentsMargins(0, 0, 0, 0);
-    chart_wrap->setSpacing(0);
+    chart_wrap_ = new QHBoxLayout(chart_container_);
+    chart_wrap_->setContentsMargins(0, 0, 0, 0);
+    chart_wrap_->setSpacing(0);
 
     chart_col_ = new QVBoxLayout();
     chart_col_->setContentsMargins(0, 0, 0, 0);
@@ -473,12 +486,12 @@ void MT5FleetChartPanel::build_ui() {
     indicator_pane_ = new IndicatorPane(chart_container_);
     chart_col_->addWidget(indicator_pane_);
 
-    chart_wrap->addLayout(chart_col_, 1);
+    chart_wrap_->addLayout(chart_col_, 1);
 
     volume_profile_ = new VolumeProfileLayer(chart_container_);
     volume_profile_->setFixedWidth(80);
     volume_profile_->hide();
-    chart_wrap->addWidget(volume_profile_);
+    chart_wrap_->addWidget(volume_profile_);
 
     root->addWidget(chart_container_, 1);
 

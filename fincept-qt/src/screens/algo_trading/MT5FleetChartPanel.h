@@ -35,6 +35,7 @@ class DrawingObject;
 class IndicatorPane;
 class VolumeProfileLayer;
 class PolygonOverlay;
+class ExecutionPanel;
 class BarReplayEngine;
 class ChartAlertManager;
 class TimeSessionManager;
@@ -132,13 +133,13 @@ class MT5FleetChartPanel : public QWidget {
     void on_add_alert();
     void on_alert_triggered(const ChartAlert& alert);
     void on_paper_trade();
-    void refresh_positions();
 
     // Date range
     void on_date_range_apply();
 
   public:
     void set_price(double price) { if (price_label_) price_label_->setText(QString("$%1").arg(price, 0, 'f', 2)); }
+    void refresh_positions();
 
   private:
     void build_ui();
@@ -175,6 +176,7 @@ class MT5FleetChartPanel : public QWidget {
     // Chart — CryptoChart with TradingView-like crosshair/OHLC tooltip
     QWidget* chart_container_ = nullptr;
     QVBoxLayout* chart_col_ = nullptr;
+    QHBoxLayout* chart_wrap_ = nullptr;
     crypto::CryptoChart* crypto_chart_ = nullptr;
     QChartView* chart_view_ = nullptr;
     QChart* chart_ = nullptr;
@@ -220,6 +222,7 @@ class MT5FleetChartPanel : public QWidget {
 
     // New subsystems
     PolygonOverlay* polygon_overlay_ = nullptr;
+    ExecutionPanel* exec_panel_ = nullptr;
     VolumeProfileLayer* volume_profile_ = nullptr;
     BarReplayEngine* replay_engine_ = nullptr;
     ChartAlertManager* alert_manager_ = nullptr;
