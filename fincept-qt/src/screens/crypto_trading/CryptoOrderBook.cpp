@@ -10,6 +10,7 @@
 #include <QPainter>
 #include <QShowEvent>
 #include <QStyle>
+#include <QComboBox>
 #include <QVBoxLayout>
 
 #include <algorithm>
@@ -103,6 +104,31 @@ CryptoOrderBook::CryptoOrderBook(QWidget* parent) : QWidget(parent) {
         connect(mode_btns_[i], &QPushButton::clicked, this, [this, i]() { set_active_mode(i); });
         h_layout->addWidget(mode_btns_[i]);
     }
+
+    // DOM One-Click toggle
+    one_click_btn_ = new QPushButton("1-CLK");
+    one_click_btn_->setObjectName("cryptoObModeBtn");
+    one_click_btn_->setFixedHeight(22);
+    one_click_btn_->setCursor(Qt::PointingHandCursor);
+    one_click_btn_->setCheckable(true);
+    connect(one_click_btn_, &QPushButton::toggled, this, [this](bool on) {
+        one_click_enabled_ = on;
+        one_click_btn_->setProperty("active", on);
+        one_click_btn_->style()->unpolish(one_click_btn_);
+        one_click_btn_->style()->polish(one_click_btn_);
+    });
+    h_layout->addWidget(one_click_btn_);
+
+    vol_combo_ = new QComboBox(this);
+    vol_combo_->addItems({"0.01", "0.1", "1.0", "10"});
+    vol_combo_->setCurrentText("0.1");
+    vol_combo_->setFixedWidth(50);
+    vol_combo_->setFixedHeight(22);
+    connect(vol_combo_, &QComboBox::currentTextChanged, this, [this](const QString& t) {
+        one_click_volume_ = t.toDouble();
+    });
+    h_layout->addWidget(vol_combo_);
+
     layout->addWidget(header);
 
     // Spread label
@@ -180,13 +206,13 @@ void CryptoOrderBook::resizeEvent(QResizeEvent* event) {
 }
 
 void CryptoOrderBook::mousePressEvent(QMouseEvent* event) {
-    if (view_mode_ != ObViewMode::Book)
+    if (view_mode_ != ObViewMode::Book) {
+        QWidget::mousePressEvent(event);
         return;
+    }
 
-    // Calculate which row was clicked in the paint area
     const int paint_y = event->pos().y() - (HEADER_H + SPREAD_H);
-    if (paint_y < 0)
-        return;
+    if (paint_y < 0) { QWidget::mousePressEvent(event); return; }
 
     const int row = paint_y / ROW_H;
     QMutexLocker lock(&mutex_);
@@ -194,14 +220,27 @@ void CryptoOrderBook::mousePressEvent(QMouseEvent* event) {
     const int bid_count = std::min(static_cast<int>(bids_.size()), OB_MAX_DISPLAY_LEVELS);
 
     if (row < ask_count) {
-        // Clicked an ask row (displayed in reverse)
         const int src = ask_count - 1 - row;
-        if (src < asks_.size())
-            emit price_clicked(asks_[src].first);
+        if (src < asks_.size()) {
+            double price = asks_[src].first;
+            if (one_click_enabled_) {
+                // DOM one-click: clicking ASK = BUY at ask price
+                emit one_click_order("BUY", price, one_click_volume_);
+            } else {
+                emit price_clicked(price);
+            }
+        }
     } else if (row < ask_count + bid_count) {
         const int bid_idx = row - ask_count;
-        if (bid_idx < bids_.size())
-            emit price_clicked(bids_[bid_idx].first);
+        if (bid_idx < bids_.size()) {
+            double price = bids_[bid_idx].first;
+            if (one_click_enabled_) {
+                // DOM one-click: clicking BID = SELL at bid price
+                emit one_click_order("SELL", price, one_click_volume_);
+            } else {
+                emit price_clicked(price);
+            }
+        }
     }
 }
 

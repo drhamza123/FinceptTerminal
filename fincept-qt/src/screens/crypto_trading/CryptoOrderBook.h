@@ -21,11 +21,12 @@ class CryptoOrderBook : public QWidget {
 
     void set_data(const QVector<QPair<double, double>>& bids, const QVector<QPair<double, double>>& asks, double spread,
                   double spread_pct);
-
+    void set_one_click_volume(double vol) { one_click_volume_ = vol; }
     void add_tick_snapshot(const TickSnapshot& snap);
 
   signals:
     void price_clicked(double price);
+    void one_click_order(const QString& side, double price, double volume);
 
   protected:
     void paintEvent(QPaintEvent* event) override;
@@ -42,6 +43,12 @@ class CryptoOrderBook : public QWidget {
     QPushButton* mode_btns_[4] = {};
     QLabel* spread_label_ = nullptr;
     QWidget* canvas_ = nullptr;
+
+    // One-click DOM trading
+    QPushButton* one_click_btn_ = nullptr;
+    QComboBox* vol_combo_ = nullptr;
+    bool one_click_enabled_ = false;
+    double one_click_volume_ = 0.1;
 
     // Data (mutex-protected)
     QVector<QPair<double, double>> bids_;

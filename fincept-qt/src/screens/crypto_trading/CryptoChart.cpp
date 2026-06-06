@@ -43,6 +43,7 @@
 #include <QChart>
 #include <QChartView>
 #include <QDateTime>
+#include <QOpenGLWidget>
 #include <QDateTimeAxis>
 #include <QEnterEvent>
 #include <QFont>
@@ -185,6 +186,7 @@ CryptoChart::CryptoChart(QWidget* parent) : QWidget(parent) {
 
     // ── Chart proper ───────────────────────────────────────────────────────
     chart_ = new QChart;
+    chart_->setAnimationOptions(QChart::NoAnimation); // CRITICAL: 0% CPU for static charts
     chart_->setBackgroundBrush(QBrush(QColor(colors::BG_SURFACE())));
     chart_->setBackgroundPen(QPen(Qt::NoPen));
     chart_->setPlotAreaBackgroundBrush(QBrush(QColor(colors::BG_BASE())));

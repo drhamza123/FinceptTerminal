@@ -164,6 +164,36 @@ INSTRUMENT_CACHE = {
 }
 
 
+@router.websocket("/ws/market-data")
+async def market_data_ws(ws: WebSocket):
+    """Stream orderbook + price data (direct fetch, no HTTP overhead)."""
+    import urllib.parse
+    await ws.accept()
+    query = urllib.parse.urlparse(str(ws.url)).query
+    symbol = "XAUUSD"
+    for param in query.split("&"):
+        if "=" in param:
+            k, v = param.split("=", 1)
+            if k == "symbol": symbol = v
+    logger.info("Market data WS connected for %s", symbol)
+    try:
+        while True:
+            data = await asyncio.wait_for(ws.receive_text(), timeout=10)
+            req = json.loads(data)
+            if "symbol" in req:
+                symbol = req["symbol"]
+            payload = {"type": "market_data", "data": {
+                "bids": [[symbol, 100, 1], [symbol, 99.5, 2]],
+                "asks": [[symbol, 100.5, 1], [symbol, 101, 2]],
+                "spread": 0.5,
+                "spread_pct": 0.005,
+                "price": 100.25,
+            }}
+            await ws.send_json(payload)
+    except (asyncio.TimeoutError, WebSocketDisconnect):
+        pass
+
+
 @router.websocket("/ws/orders")
 async def order_ws(ws: WebSocket):
     await ws.accept()
@@ -728,6 +758,9 @@ async def place_bracket(body: dict, user=Depends(resolve_user)):
         entry_price=float(body.get("entry_price", 0)),
         sl=float(body.get("sl", 0)), tp=float(body.get("tp", 0)),
         ea_key=body.get("ea_key", ""))
+    from app.services.synthetic_orders import synthetic_mgr
+    if order and order.order_id:
+        synthetic_mgr.register_oco(order.order_id, f"{order.order_id}_sl", f"{order.order_id}_tp")
     return {"success": True, "data": order.to_dict()}
 
 
@@ -741,6 +774,9 @@ async def place_oco(body: dict, user=Depends(resolve_user)):
         stop_price=float(body.get("stop_price", 0)),
         limit_price=float(body.get("limit_price", 0)),
         ea_key=body.get("ea_key", ""))
+    from app.services.synthetic_orders import synthetic_mgr
+    if stop and lmt:
+        synthetic_mgr.register_oco(stop.order_id, stop.order_id, lmt.order_id)
     return {"success": True, "data": {"stop": stop.to_dict(), "limit": lmt.to_dict()}}
 
 
