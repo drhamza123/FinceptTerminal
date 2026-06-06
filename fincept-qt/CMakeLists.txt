@@ -1537,6 +1537,7 @@ set(SCREEN_SOURCES
     # Excel Spreadsheet
     src/screens/excel/ExcelScreen.cpp
     src/screens/excel/SpreadsheetWidget.cpp
+    src/screens/execution/ExecutionScreen.cpp
 
     # Government Data
     src/screens/gov_data/GovDataScreen.cpp
@@ -2128,6 +2129,7 @@ set_source_files_properties(
     src/screens/equity_research/EquityTechnicalsTab.cpp
     src/screens/excel/ExcelScreen.cpp
     src/screens/excel/SpreadsheetWidget.cpp
+    src/screens/execution/ExecutionScreen.cpp
     src/screens/file_manager/FileManagerScreen.cpp
     src/screens/forum/ForumFeedPanel.cpp
     src/screens/forum/ForumPostListPanel.cpp

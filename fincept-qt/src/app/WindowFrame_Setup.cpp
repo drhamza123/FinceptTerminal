@@ -41,6 +41,7 @@
 #include "screens/community/CommunityMarketplaceScreen.h"
 #include "screens/crypto_center/CryptoCenterScreen.h"
 #include "screens/crypto_trading/CryptoTradingScreen.h"
+#include "screens/execution/ExecutionScreen.h"
 #include "screens/dashboard/DashboardScreen.h"
 #include "screens/data_mapping/DataMappingScreen.h"
 #include "screens/data_sources/DataSourcesScreen.h"
@@ -236,6 +237,7 @@ void WindowFrame::setup_dock_screens() {
     dock_router_->register_factory("dashboard", []() { return new screens::DashboardScreen; });
     dock_router_->register_factory("markets", []() { return new screens::MarketsScreen; });
     dock_router_->register_factory("crypto_trading", []() { return new screens::CryptoTradingScreen; });
+    dock_router_->register_factory("execution", []() { return new screens::ExecutionScreen; });
     dock_router_->register_factory("news", []() { return new screens::NewsScreen; });
     dock_router_->register_factory("forum", []() { return new screens::ForumScreen; });
     dock_router_->register_factory("watchlist", []() { return new screens::WatchlistScreen; });

@@ -54,6 +54,7 @@ QString DockScreenRouter::title_for_id(const QString& id) {
         {"dashboard", QT_TRANSLATE_NOOP("fincept::DockScreenRouter", "Dashboard")},
         {"markets", QT_TRANSLATE_NOOP("fincept::DockScreenRouter", "Markets")},
         {"crypto_trading", QT_TRANSLATE_NOOP("fincept::DockScreenRouter", "Crypto Trading")},
+        {"execution", QT_TRANSLATE_NOOP("fincept::DockScreenRouter", "Execution")},
         {"equity_trading", QT_TRANSLATE_NOOP("fincept::DockScreenRouter", "Equity Trading")},
         {"algo_trading", QT_TRANSLATE_NOOP("fincept::DockScreenRouter", "Algo Trading")},
         {"action_center", QT_TRANSLATE_NOOP("fincept::DockScreenRouter", "Action Center")},
