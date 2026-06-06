@@ -27,6 +27,7 @@ class ExecutionScreen : public QWidget {
     void on_symbol_submit();
     void on_symbol_selected(const QString& symbol);
     void on_mode_toggled();
+    void on_api_clicked();
 
   private:
     void build_ui();

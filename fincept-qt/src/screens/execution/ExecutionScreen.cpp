@@ -1,4 +1,5 @@
 #include "screens/execution/ExecutionScreen.h"
+#include "screens/equity_trading/AccountManagementDialog.h"
 #include "trading/SmartOrderEngine.h"
 #include "network/http/HttpClient.h"
 #include "ui/theme/Theme.h"
@@ -77,13 +78,19 @@ void ExecutionScreen::build_ui() {
     connect(symbol_input_, &QLineEdit::returnPressed, this, &ExecutionScreen::on_symbol_submit);
     cmd->addWidget(symbol_input_);
 
-    mode_btn_ = new QPushButton("PAPER", this);
-    mode_btn_->setObjectName("cryptoModeBtn");
+    mode_btn_ = new QPushButton("⚡ PAPER", this);
+    mode_btn_->setStyleSheet("QPushButton{background:#1a3a1a;color:#22c55e;border:1px solid #22c55e;padding:2px 10px;font-weight:700;font-size:10px;border-radius:3px;}QPushButton:checked{background:#3a1a1a;color:#ef4444;border-color:#ef4444;}");
     mode_btn_->setCheckable(true);
-    mode_btn_->setFixedHeight(22);
-    mode_btn_->setProperty("mode", "paper");
+    mode_btn_->setFixedHeight(24);
     connect(mode_btn_, &QPushButton::clicked, this, &ExecutionScreen::on_mode_toggled);
     cmd->addWidget(mode_btn_);
+
+    auto* api_btn = new QPushButton("API", this);
+    api_btn->setObjectName("cryptoApiBtn");
+    api_btn->setFixedHeight(22);
+    api_btn->setCursor(Qt::PointingHandCursor);
+    connect(api_btn, &QPushButton::clicked, this, &ExecutionScreen::on_api_clicked);
+    cmd->addWidget(api_btn);
 
     ws_status_ = new QLabel("WS: --", this);
     ws_status_->setObjectName("cryptoWsStatus");
@@ -178,12 +185,19 @@ void ExecutionScreen::on_symbol_selected(const QString& symbol) {
 }
 
 void ExecutionScreen::on_mode_toggled() {
-    is_paper_mode_ = !is_paper_mode_;
-    mode_btn_->setText(is_paper_mode_ ? "PAPER" : "LIVE");
-    mode_btn_->setProperty("mode", is_paper_mode_ ? "paper" : "live");
-    mode_btn_->style()->unpolish(mode_btn_);
-    mode_btn_->style()->polish(mode_btn_);
-    ws_status_->setText(is_paper_mode_ ? "Paper Mode" : "LIVE Mode");
+    is_paper_mode_ = !mode_btn_->isChecked();
+    mode_btn_->setText(is_paper_mode_ ? "⚡ PAPER" : "🔥 LIVE");
+    ws_status_->setText(is_paper_mode_ ? "Paper mode — simulated execution" : "LIVE mode — real broker execution");
+}
+
+void ExecutionScreen::on_api_clicked() {
+    auto* dlg = new equity::AccountManagementDialog(this);
+    connect(dlg, &equity::AccountManagementDialog::credentials_saved, this,
+        [this](const QString& account_id) {
+            ws_status_->setText("Account: " + account_id.left(12));
+        });
+    dlg->exec();
+    dlg->deleteLater();
 }
 
 void ExecutionScreen::refresh_account() {
