@@ -7,7 +7,7 @@ from datetime import datetime, timezone
 
 import msgpack
 
-from fastapi import APIRouter, Depends, WebSocket, WebSocketDisconnect
+from fastapi import APIRouter, Body, Depends, Header, WebSocket, WebSocketDisconnect
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -15,6 +15,7 @@ from app.database import async_session_factory, get_db
 from app.models.ea import EAInstance, EATemplate, instance_to_dict
 from app.models.user import User
 from app.routers.auth import resolve_user
+from app.services.auth import get_user_by_session
 from app.services.mt5_compiler import compile_mql5, deploy_to_experts
 from app.services.mt5_protocol import (
     MQL5_AGENT_PROMPT,
@@ -31,12 +32,14 @@ from app.services.mt5_protocol import (
     cmd_iceberg_order as proto_iceberg,
     cmd_close_order as proto_close,
     cmd_modify_order as proto_modify,
+    cmd_market_order,
     parse_ea_message,
 )
 from app.services.order_manager import (
     OrderManager, OrderSide, OrderType,
     get_order_manager,
 )
+from app.services import mt5_direct
 
 logger = logging.getLogger("guardian.mt5")
 router = APIRouter(tags=["mt5_bridge"])
@@ -176,6 +179,30 @@ async def market_data_ws(ws: WebSocket):
             k, v = param.split("=", 1)
             if k == "symbol": symbol = v
     logger.info("Market data WS connected for %s", symbol)
+    if mt5_direct.is_enabled():
+        try:
+            while True:
+                try:
+                    data = await asyncio.wait_for(ws.receive_text(), timeout=0.1)
+                    req = json.loads(data)
+                    if "symbol" in req:
+                        symbol = req["symbol"]
+                except asyncio.TimeoutError:
+                    pass
+                payload = mt5_direct.market_payload(symbol)
+                if payload is None:
+                    await ws.send_json({
+                        "type": "error",
+                        "error": "MT5 direct market data unavailable. Check MT5 terminal, login, and symbol.",
+                    })
+                    await asyncio.sleep(1)
+                    continue
+                await ws.send_json(payload)
+                await asyncio.sleep(0.1)
+        except WebSocketDisconnect:
+            pass
+        return
+
     try:
         while True:
             data = await asyncio.wait_for(ws.receive_text(), timeout=10)
@@ -194,6 +221,29 @@ async def market_data_ws(ws: WebSocket):
         pass
 
 
+@router.websocket("/ws/market-data/{symbol}")
+async def market_data_ws_path(ws: WebSocket, symbol: str):
+    await ws.accept()
+    if not mt5_direct.is_enabled():
+        await ws.send_json({"type": "error", "error": "MT5 direct mode is disabled"})
+        await ws.close()
+        return
+    try:
+        while True:
+            payload = mt5_direct.market_payload(symbol)
+            if payload:
+                await ws.send_json(payload)
+            else:
+                await ws.send_json({
+                    "type": "error",
+                    "error": "MT5 direct market data unavailable. Check terminal, login, and symbol.",
+                })
+                await asyncio.sleep(1)
+            await asyncio.sleep(0.1)
+    except WebSocketDisconnect:
+        pass
+
+
 @router.websocket("/ws/orders")
 async def order_ws(ws: WebSocket):
     await ws.accept()
@@ -209,27 +259,63 @@ async def order_ws(ws: WebSocket):
             sl = order.get("sl", 0)
             tp = order.get("tp", 0)
 
-            if symbol not in INSTRUMENT_CACHE:
-                await ws.send_bytes(msgpack.packb({"error": "Unknown symbol"}))
+            if symbol not in INSTRUMENT_CACHE and not mt5_direct.is_enabled():
+                await ws.send_bytes(msgpack.packb({"status": "REJECTED", "error": "Unknown symbol"}))
                 continue
 
             # Validate
-            inst = INSTRUMENT_CACHE[symbol]
+            inst = INSTRUMENT_CACHE.get(symbol, {"min_lot": 0.01, "max_lot": 100})
             vol = max(inst["min_lot"], min(inst["max_lot"], volume))
 
-            # Execute via mocked MT5 or forward to bridge
-            ticket = int(time.time() * 1000) % 1000000
+            if mt5_direct.is_enabled():
+                result = mt5_direct.execute_market_order(symbol, vol, side, sl, tp)
+                latency_ms = result.get("latency_ms", round((time.perf_counter() - start) * 1000, 2))
+                if not result.get("success"):
+                    await ws.send_bytes(msgpack.packb({
+                        "status": "REJECTED",
+                        "error": result.get("error", "MT5 direct order rejected"),
+                        "latency_ms": latency_ms,
+                        "retcode": result.get("retcode", 0),
+                    }))
+                    continue
+                await ws.send_bytes(msgpack.packb({
+                    "ticket": result.get("ticket", 0),
+                    "client_order_id": f"direct-{int(time.time() * 1000)}",
+                    "symbol": symbol,
+                    "side": side,
+                    "volume": vol,
+                    "status": "FILLED",
+                    "fill_price": result.get("fill_price", 0),
+                    "latency_ms": latency_ms,
+                    "ts": time.time(),
+                    "source": "mt5_direct",
+                }))
+                continue
+
+            if not active_connections:
+                await ws.send_bytes(msgpack.packb({
+                    "status": "REJECTED",
+                    "error": "MT5 bridge not connected. Attach GuardianBridge EA first.",
+                    "latency_ms": round((time.perf_counter() - start) * 1000, 2),
+                }))
+                continue
+
+            ea_key = next(iter(active_connections.keys()))
+            client_order_id = f"exec-{int(time.time() * 1000)}"
+            await _send_to_ea(ea_key, cmd_market_order(ea_key, client_order_id, side, vol, symbol, sl, tp))
             latency_ms = (time.perf_counter() - start) * 1000
 
             response = {
-                "ticket": ticket,
+                "ticket": 0,
+                "client_order_id": client_order_id,
                 "symbol": symbol,
                 "side": side,
                 "volume": vol,
-                "status": "FILLED",
+                "status": "SUBMITTED",
                 "fill_price": 0,
                 "latency_ms": round(latency_ms, 2),
                 "ts": time.time(),
+                "ea_key": ea_key,
             }
             await ws.send_bytes(msgpack.packb(response))
 
@@ -402,6 +488,13 @@ async def list_instances(user: User = Depends(resolve_user), db: AsyncSession = 
 
 @router.get("/mt5/ea/connections")
 async def list_connections(user: User = Depends(resolve_user)):
+    if mt5_direct.is_enabled():
+        ok, message = mt5_direct.connect()
+        if ok:
+            return {"success": True, "data": {
+                "mt5:direct": {"connected": True, "instance_id": 0, "message": message}
+            }}
+        return {"success": True, "data": {}}
     return {"success": True, "data": {k: {"connected": True, "instance_id": v.get("instance_id")}
                                        for k, v in active_connections.items()}}
 
@@ -513,7 +606,7 @@ Rules:
             resp = await client.post(
                 f"{base_url}/chat/completions",
                 headers=req_headers,
-                json={"model": "gpt-4", "messages": [
+                json={"model": settings.LLM_DEFAULT_MODEL or "llama3.2:1b", "messages": [
                     {"role": "system", "content": system},
                     {"role": "user", "content": prompt}
                 ], "temperature": 0.3}
@@ -566,7 +659,7 @@ Make both functionally identical: same logic, same parameters, same entry/exit r
             resp = await client.post(
                 f"{base_url}/chat/completions",
                 headers=req_headers,
-                json={"model": "gpt-4", "messages": [
+                json={"model": settings.LLM_DEFAULT_MODEL or "llama3.2:1b", "messages": [
                     {"role": "system", "content": system},
                     {"role": "user", "content": prompt}
                 ], "temperature": 0.3}
@@ -672,6 +765,36 @@ async def compiler_status(user: User = Depends(resolve_user)):
     }}
 
 
+@router.get("/mt5/direct/status")
+async def mt5_direct_status(user: User = Depends(resolve_user)):
+    ok, message = mt5_direct.connect()
+    account = mt5_direct.account_summary() if ok else None
+    return {"success": ok, "data": {
+        "enabled": mt5_direct.is_enabled(),
+        "package_available": mt5_direct.is_available(),
+        "connected": ok,
+        "message": message,
+        "account": account,
+    }}
+
+
+@router.post("/execute/trade")
+async def execute_live_order(body: dict = Body(...), user: User = Depends(resolve_user)):
+    result = mt5_direct.execute_market_order(
+        symbol=body.get("symbol", "XAUUSD"),
+        volume=float(body.get("volume", 0.01)),
+        side=body.get("action", body.get("side", "BUY")),
+        sl=float(body.get("sl", 0)),
+        tp=float(body.get("tp", 0)),
+    )
+    return {"success": bool(result.get("success")), "data": result, "error": result.get("error", "")}
+
+
+@router.get("/open-positions")
+async def get_live_positions(user: User = Depends(resolve_user)):
+    return {"success": True, "data": mt5_direct.open_positions()}
+
+
 @router.post("/mt5/setup-compiler")
 async def setup_mt5_compiler(user: User = Depends(resolve_user)):
     import os, platform, shutil
@@ -713,12 +836,17 @@ async def setup_mt5_compiler(user: User = Depends(resolve_user)):
 
 
 # ── Order Management ─────────────────────────────────────────────
-from fastapi import Body
-
-
-
 @router.post("/mt5/order/market")
 async def place_market(body: dict, user=Depends(resolve_user)):
+    if mt5_direct.is_enabled():
+        result = mt5_direct.execute_market_order(
+            symbol=body.get("symbol", "XAUUSD"),
+            side=body.get("side", "BUY"),
+            volume=float(body.get("volume", 0.01)),
+            sl=float(body.get("sl", 0)),
+            tp=float(body.get("tp", 0)),
+        )
+        return {"success": bool(result.get("success")), "data": result, "error": result.get("error", "")}
     om = get_order_manager()
     side = OrderSide.BUY if body.get("side", "BUY").upper() == "BUY" else OrderSide.SELL
     order = await om.place_market(
@@ -767,8 +895,8 @@ async def place_bracket(body: dict, user=Depends(resolve_user)):
         sl=float(body.get("sl", 0)), tp=float(body.get("tp", 0)),
         ea_key=body.get("ea_key", ""))
     from app.services.synthetic_orders import synthetic_mgr
-    if order and order.order_id:
-        synthetic_mgr.register_oco(order.order_id, f"{order.order_id}_sl", f"{order.order_id}_tp")
+    if order and order.id:
+        synthetic_mgr.register_oco(order.id, f"{order.id}_sl", f"{order.id}_tp")
     return {"success": True, "data": order.to_dict()}
 
 
@@ -784,7 +912,7 @@ async def place_oco(body: dict, user=Depends(resolve_user)):
         ea_key=body.get("ea_key", ""))
     from app.services.synthetic_orders import synthetic_mgr
     if stop and lmt:
-        synthetic_mgr.register_oco(stop.order_id, stop.order_id, lmt.order_id)
+        synthetic_mgr.register_oco(stop.id, stop.id, lmt.id)
     return {"success": True, "data": {"stop": stop.to_dict(), "limit": lmt.to_dict()}}
 
 
@@ -858,6 +986,8 @@ async def list_orders(symbol: str = "", state: str = "",
 
 @router.get("/mt5/positions")
 async def list_positions(user=Depends(resolve_user)):
+    if mt5_direct.is_enabled():
+        return {"success": True, "data": mt5_direct.open_positions()}
     om = get_order_manager()
     positions = await om.get_positions()
     return {"success": True, "data": positions}
@@ -865,15 +995,161 @@ async def list_positions(user=Depends(resolve_user)):
 
 @router.get("/mt5/account")
 async def account_info(user=Depends(resolve_user)):
+    if mt5_direct.is_enabled():
+        summary = mt5_direct.account_summary()
+        if summary is not None:
+            return {"success": True, "data": summary}
     om = get_order_manager()
     summary = await om.get_account_summary()
     return {"success": True, "data": summary}
 
 # ── Market data for MT5 Fleet Chart ──
 
+async def _optional_user(
+    x_api_key: str = Header(default=None),
+    x_session_token: str = Header(default=None),
+    db: AsyncSession = Depends(get_db),
+):
+    if x_api_key and x_session_token:
+        user = await get_user_by_session(db, x_api_key, x_session_token)
+        if user:
+            return user
+    return None
+
+@router.get("/mt5/market/quotes")
+async def get_quotes(symbols: str = "XAUUSD", user: User | None = Depends(_optional_user)):
+    """Return live MT5 quotes for DataHub fan-out, with yfinance fallback."""
+    if not mt5_direct.is_enabled():
+        return {"success": False, "error": "MT5 direct mode is disabled", "data": []}
+
+    rows = []
+    errors = []
+    yf_symbols = []
+    sym_map = {
+        "XAUUSD": "GC=F", "XAGUSD": "SI=F", "XPTUSD": "PL=F", "XPDUSD": "PA=F",
+        "WTI": "CL=F", "BRENT": "BZ=F", "NG": "NG=F", "XCUUSD": "HG=F",
+        "EURUSD": "EURUSD=X", "GBPUSD": "GBPUSD=X", "USDJPY": "JPY=X",
+        "AUDUSD": "AUDUSD=X", "USDCAD": "USDCAD=X", "NZDUSD": "NZDUSD=X",
+        "USDCHF": "CHF=X", "GBPJPY": "GBPJPY=X", "EURJPY": "EURJPY=X",
+        "EURCHF": "EURCHF=X",
+        "BTCUSD": "BTC-USD", "ETHUSD": "ETH-USD", "BNBUSD": "BNB-USD",
+        "SOLUSD": "SOL-USD", "XRPUSD": "XRP-USD", "ADAUSD": "ADA-USD",
+        "DOGEUSD": "DOGE-USD", "DOTUSD": "DOT-USD", "LTCUSD": "LTC-USD",
+        "UNIUSD": "UNI-USD", "AVAXUSD": "AVAX-USD", "ATOMUSD": "ATOM-USD",
+        "LINKUSD": "LINK-USD",
+        # Indices
+        "US500": "^GSPC", "US30": "^DJI", "NAS100": "^IXIC",
+        "US2000": "^RUT", "UK100": "^FTSE", "GER40": "^GDAXI",
+        "FRA40": "^FCHI", "JP225": "^N225", "HK50": "^HSI",
+        "AU200": "^AXJO", "ES50": "^STOXX50E", "IBEX": "^IBEX",
+        "AEX": "^AEX", "BSESN": "^BSESN", "NSEI": "^NSEI",
+        "VIX": "^VIX", "TNX": "^TNX", "TYX": "^TYX", "FVX": "^FVX",
+        "IRX": "^IRX", "SOX": "^SOX",
+    }
+
+    for raw in symbols.split(","):
+        symbol = raw.strip()
+        if not symbol:
+            continue
+        # Strip $ prefix that some text sources add (e.g. $VIX → VIX)
+        clean = symbol.lstrip("$")
+        # Skip yahoo-style ^ prefix for MT5 (will use in fallback)
+        mt5_sym = clean.lstrip("^")
+        quote = mt5_direct.quote_payload(mt5_sym)
+        if quote:
+            quote["symbol"] = symbol
+            quote["mt5_symbol"] = mt5_direct.normalize_symbol(mt5_sym)
+            rows.append(quote)
+        else:
+            # Try yfinance fallback with proper symbol format
+            base_sym = mt5_direct.normalize_symbol(clean).replace(".s", "").replace(".S", "")
+            base_sym = base_sym.lstrip("$")
+            # Direct lookup
+            yf_sym = sym_map.get(base_sym.upper(), None)
+            if not yf_sym and "." not in base_sym:
+                # Check if it's an index - needs ^ prefix for yfinance
+                index_map = {
+                    "GSPC": "^GSPC", "DJI": "^DJI", "IXIC": "^IXIC",
+                    "RUT": "^RUT", "VIX": "^VIX", "FTSE": "^FTSE",
+                    "GDAXI": "^GDAXI", "FCHI": "^FCHI", "N225": "^N225",
+                    "HSI": "^HSI", "AXJO": "^AXJO", "STOXX50E": "^STOXX50E",
+                    "BSESN": "^BSESN", "NSEI": "^NSEI", "IBEX": "^IBEX",
+                    "TNX": "^TNX", "TYX": "^TYX", "FVX": "^FVX", "IRX": "^IRX",
+                    "SOX": "^SOX", "AEX": "^AEX",
+                }
+                yf_sym = index_map.get(base_sym.upper(), base_sym)
+            if yf_sym:
+                yf_symbols.append((symbol, yf_sym))
+            else:
+                errors.append(symbol)
+
+    # Batch fetch yfinance fallbacks
+    if yf_symbols:
+        try:
+            import yfinance as yf
+            tickers = [s[1] for s in yf_symbols]
+            yf_data = yf.download(tickers, period="1d", interval="1d", progress=False, auto_adjust=True, group_by="ticker")
+            for orig_sym, yf_sym in yf_symbols:
+                try:
+                    if len(tickers) == 1:
+                        row = yf_data
+                    else:
+                        row = yf_data[yf_sym]
+                    if row is not None and not row.empty:
+                        latest = row.iloc[-1]
+                        prev = row.iloc[-2] if len(row) > 1 else latest
+                        price = float(latest.get("Close", latest.get("Adj Close", 0)) or 0)
+                        prev_close = float(prev.get("Close", prev.get("Adj Close", 0)) or 0)
+                        change = price - prev_close
+                        change_pct = (change / prev_close * 100) if prev_close else 0
+                        rows.append({
+                            "symbol": orig_sym,
+                            "name": orig_sym,
+                            "price": price,
+                            "change": change,
+                            "change_percent": round(change_pct, 2),
+                            "high": float(latest.get("High", 0) or 0),
+                            "low": float(latest.get("Low", 0) or 0),
+                            "volume": float(latest.get("Volume", 0) or 0),
+                            "bid": 0,
+                            "ask": 0,
+                            "time": int(latest.name.timestamp()) if hasattr(latest.name, "timestamp") else int(time.time()),
+                            "source": "yfinance_vps",
+                        })
+                    else:
+                        errors.append(orig_sym)
+                except Exception:
+                    errors.append(orig_sym)
+        except Exception:
+            for orig_sym, _ in yf_symbols:
+                errors.append(orig_sym)
+
+    return {
+        "success": bool(rows),
+        "data": rows,
+        "errors": errors,
+        "source": "mt5_direct_with_yfinance",
+    }
+
+
 @router.get("/mt5/market/orderbook")
 async def get_orderbook(symbol: str = "XAUUSD", user=Depends(resolve_user)):
     """Return synthetic orderbook for DOM display."""
+    if mt5_direct.is_enabled():
+        payload = mt5_direct.market_payload(symbol)
+        if payload:
+            data = payload["data"]
+            return {
+                "success": True,
+                "symbol": symbol.upper(),
+                "last_price": data.get("price", 0),
+                "spread": data.get("spread", 0),
+                "spread_points": data.get("spread_points", 0),
+                "bids": [{"price": p[0], "volume": p[1]} for p in data.get("bids", [])],
+                "asks": [{"price": p[0], "volume": p[1]} for p in data.get("asks", [])],
+                "source": "mt5_direct",
+            }
+        return {"success": False, "error": "MT5 direct orderbook unavailable"}
     import random
     base_price = {"XAUUSD": 2350, "XAGUSD": 31.5, "EURUSD": 1.12,
                   "GBPUSD": 1.33, "USDJPY": 155.0, "BTCUSD": 72000,
@@ -893,8 +1169,13 @@ async def get_orderbook(symbol: str = "XAUUSD", user=Depends(resolve_user)):
 
 @router.get("/mt5/market/ohlc")
 async def get_ohlc(symbol: str = "XAUUSD", timeframe: str = "H1", count: int = 100,
-                   user: User = Depends(resolve_user)):
-    """Get OHLC price data for MT5 Fleet chart display."""
+                   user: User | None = Depends(_optional_user)):
+    """Get OHLC price data for MT5 Fleet chart display, with yfinance fallback."""
+    if mt5_direct.is_enabled():
+        candles = mt5_direct.ohlc(symbol, timeframe, count)
+        if candles is not None:
+            return {"success": True, "data": candles, "source": "mt5_direct"}
+        # Fall through to yfinance even when MT5 is enabled
     try:
         import yfinance as yf
         # Map timeframe to yfinance interval
@@ -1600,3 +1881,59 @@ async def delete_alert(body: dict, user=Depends(resolve_user)):
             del _alerts_store[alert_id]
             return {"success": True}
     return {"success": False, "error": "Alert not found"}
+
+
+# ── MT5 Credential Configuration ──────────────────────────────
+
+@router.post("/mt5/configure")
+async def mt5_configure(body: dict, user=Depends(resolve_user)):
+    """Store MT5 login credentials for terminal auto-login."""
+    login = body.get("login", "")
+    password = body.get("password", "")
+    server = body.get("server", "")
+    if not login or not password:
+        return {"success": False, "error": "Login and password are required"}
+    import json, os
+    config_dir = os.path.join(os.path.dirname(os.path.dirname(__file__)), "config")
+    os.makedirs(config_dir, exist_ok=True)
+    config_path = os.path.join(config_dir, "mt5_creds.json")
+    with open(config_path, "w") as f:
+        json.dump({"login": str(login), "password": password, "server": server}, f)
+    from app.services.mt5_direct import reset_connection
+    reset_connection()
+    return {"success": True, "message": "MT5 credentials saved"}
+
+
+@router.get("/mt5/config")
+async def mt5_config(user=Depends(resolve_user)):
+    """Return whether MT5 credentials are configured."""
+    import json, os
+    config_path = os.path.join(os.path.dirname(os.path.dirname(__file__)), "config", "mt5_creds.json")
+    if os.path.exists(config_path):
+        with open(config_path) as f:
+            data = json.load(f)
+        return {"success": True, "data": {
+            "login": data.get("login", ""),
+            "server": data.get("server", ""),
+            "has_password": bool(data.get("password", "")),
+            "source": "mt5_direct",
+        }}
+    return {"success": True, "data": {"login": "", "server": "", "has_password": False}}
+
+
+# ── Download FinceptTerminal.exe for Windows ──────────────────
+
+@router.get("/download/terminal")
+async def download_terminal():
+    """Download the FinceptTerminal Windows .exe zip package."""
+    from fastapi.responses import FileResponse
+    import os
+    # Try v2 (latest build with full Qt DLLs), fall back to original
+    import os
+    zip_path = r"C:\opt\FinceptTerminal_v2.zip"
+    if not os.path.exists(zip_path):
+        zip_path = r"C:\opt\FinceptTerminal.zip"
+    if os.path.exists(zip_path):
+        return FileResponse(zip_path, media_type="application/zip",
+                            filename="FinceptTerminal.zip")
+    return {"success": False, "error": "Build not found on this server"}

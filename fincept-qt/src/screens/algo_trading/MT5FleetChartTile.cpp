@@ -118,7 +118,7 @@ void MT5FleetChartTile::clear_series() {
 
 void MT5FleetChartTile::loadData() {
     HttpClient::instance().get(
-        QString("http://localhost:8150/mt5/market/ohlc?symbol=%1&timeframe=%2&count=%3")
+        QString("/mt5/market/ohlc?symbol=%1&timeframe=%2&count=%3")
             .arg(symbol_, timeframe_).arg(MAX_CANDLES),
         [this](Result<QJsonDocument> r) {
             if (r.is_err()) return;

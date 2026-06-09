@@ -18,7 +18,7 @@ void register_trading_nodes(NodeRegistry& registry) {
         .parameters =
             {
                 {"mode", "Mode", "select", "paper", {"paper", "live"}, "Paper = simulated, Live = real broker"},
-                {"broker", "Broker", "select", "fyers", {"fyers", "zerodha", "alpaca", "ibkr", "upstox", "dhan"}, "Broker (live mode only)"},
+                {"broker", "Broker", "select", "fyers", {"mt5", "fyers", "zerodha", "alpaca", "ibkr", "upstox", "dhan"}, "Broker (live mode only)"},
                 {"symbol", "Symbol", "string", "", {}, "Ticker symbol", true},
                 {"exchange", "Exchange", "select", "NSE", {"NSE", "BSE", "NFO", "MCX", "CDS", "NASDAQ", "NYSE"}, ""},
                 {"side", "Side", "select", "buy", {"buy", "sell"}, "", true},
@@ -44,7 +44,7 @@ void register_trading_nodes(NodeRegistry& registry) {
         .parameters =
             {
                 {"mode", "Mode", "select", "paper", {"paper", "live"}, ""},
-                {"broker", "Broker", "select", "fyers", {"fyers", "zerodha", "alpaca", "ibkr", "upstox", "dhan"}, ""},
+                {"broker", "Broker", "select", "fyers", {"mt5", "fyers", "zerodha", "alpaca", "ibkr", "upstox", "dhan"}, ""},
                 {"order_id", "Order ID", "string", "", {}, "Order ID to cancel", true},
             },
         .execute = nullptr,
@@ -63,7 +63,7 @@ void register_trading_nodes(NodeRegistry& registry) {
         .parameters =
             {
                 {"mode", "Mode", "select", "paper", {"paper", "live"}, ""},
-                {"broker", "Broker", "select", "fyers", {"fyers", "zerodha", "alpaca", "ibkr", "upstox", "dhan"}, ""},
+                {"broker", "Broker", "select", "fyers", {"mt5", "fyers", "zerodha", "alpaca", "ibkr", "upstox", "dhan"}, ""},
                 {"order_id", "Order ID", "string", "", {}, "Order ID to modify", true},
                 {"quantity", "New Quantity", "number", 0, {}, ""},
                 {"price", "New Price", "number", 0, {}, ""},
@@ -84,7 +84,7 @@ void register_trading_nodes(NodeRegistry& registry) {
         .parameters =
             {
                 {"mode", "Mode", "select", "paper", {"paper", "live"}, ""},
-                {"broker", "Broker", "select", "fyers", {"fyers", "zerodha", "alpaca", "ibkr", "upstox", "dhan"}, ""},
+                {"broker", "Broker", "select", "fyers", {"mt5", "fyers", "zerodha", "alpaca", "ibkr", "upstox", "dhan"}, ""},
                 {"status", "Status", "select", "all", {"all", "open", "filled", "cancelled"}, ""},
             },
         .execute = nullptr,
@@ -103,7 +103,7 @@ void register_trading_nodes(NodeRegistry& registry) {
         .parameters =
             {
                 {"mode", "Mode", "select", "paper", {"paper", "live"}, ""},
-                {"broker", "Broker", "select", "fyers", {"fyers", "zerodha", "alpaca", "ibkr", "upstox", "dhan"}, ""},
+                {"broker", "Broker", "select", "fyers", {"mt5", "fyers", "zerodha", "alpaca", "ibkr", "upstox", "dhan"}, ""},
             },
         .execute = nullptr,
     });
@@ -121,7 +121,7 @@ void register_trading_nodes(NodeRegistry& registry) {
         .parameters =
             {
                 {"mode", "Mode", "select", "live", {"paper", "live"}, ""},
-                {"broker", "Broker", "select", "fyers", {"fyers", "zerodha", "alpaca", "ibkr", "upstox", "dhan"}, ""},
+                {"broker", "Broker", "select", "fyers", {"mt5", "fyers", "zerodha", "alpaca", "ibkr", "upstox", "dhan"}, ""},
             },
         .execute = nullptr,
     });
@@ -139,7 +139,7 @@ void register_trading_nodes(NodeRegistry& registry) {
         .parameters =
             {
                 {"mode", "Mode", "select", "paper", {"paper", "live"}, ""},
-                {"broker", "Broker", "select", "fyers", {"fyers", "zerodha", "alpaca", "ibkr", "upstox", "dhan"}, ""},
+                {"broker", "Broker", "select", "fyers", {"mt5", "fyers", "zerodha", "alpaca", "ibkr", "upstox", "dhan"}, ""},
             },
         .execute = nullptr,
     });
@@ -157,7 +157,7 @@ void register_trading_nodes(NodeRegistry& registry) {
         .parameters =
             {
                 {"mode", "Mode", "select", "paper", {"paper", "live"}, ""},
-                {"broker", "Broker", "select", "fyers", {"fyers", "zerodha", "alpaca", "ibkr", "upstox", "dhan"}, ""},
+                {"broker", "Broker", "select", "fyers", {"mt5", "fyers", "zerodha", "alpaca", "ibkr", "upstox", "dhan"}, ""},
                 {"symbol", "Symbol", "string", "", {}, "Ticker symbol", true},
                 {"exchange", "Exchange", "select", "NSE", {"NSE", "BSE", "NFO", "MCX", "CDS", "NASDAQ", "NYSE"}, ""},
                 {"product_type", "Product Type", "select", "delivery", {"delivery", "intraday", "margin", "mtf"}, ""},
@@ -181,7 +181,7 @@ void register_trading_nodes(NodeRegistry& registry) {
         .parameters =
             {
                 {"mode", "Mode", "select", "paper", {"paper", "live"}, ""},
-                {"broker", "Broker", "select", "fyers", {"fyers", "zerodha", "alpaca", "ibkr", "upstox", "dhan"}, ""},
+                {"broker", "Broker", "select", "fyers", {"mt5", "fyers", "zerodha", "alpaca", "ibkr", "upstox", "dhan"}, ""},
                 {"symbol", "Symbol", "string", "", {}, "", true},
                 {"exchange", "Exchange", "select", "NSE", {"NSE", "BSE", "NFO", "MCX", "CDS", "NASDAQ", "NYSE"}, ""},
                 {"side", "Side", "select", "buy", {"buy", "sell"}, "", true},
@@ -206,7 +206,7 @@ void register_trading_nodes(NodeRegistry& registry) {
         .parameters =
             {
                 {"mode", "Mode", "select", "paper", {"paper", "live"}, ""},
-                {"broker", "Broker", "select", "fyers", {"fyers", "zerodha", "alpaca", "ibkr", "upstox", "dhan"}, ""},
+                {"broker", "Broker", "select", "fyers", {"mt5", "fyers", "zerodha", "alpaca", "ibkr", "upstox", "dhan"}, ""},
                 {"symbol", "Symbol", "string", "", {}, "", true},
                 {"exchange", "Exchange", "select", "NSE", {"NSE", "BSE", "NFO", "MCX", "CDS", "NASDAQ", "NYSE"}, ""},
                 {"product_type", "Product Type", "select", "intraday", {"delivery", "intraday", "margin", "mtf"}, ""},
@@ -230,7 +230,7 @@ void register_trading_nodes(NodeRegistry& registry) {
         .parameters =
             {
                 {"mode", "Mode", "select", "paper", {"paper", "live"}, ""},
-                {"broker", "Broker", "select", "fyers", {"fyers", "zerodha", "alpaca", "ibkr", "upstox", "dhan"}, ""},
+                {"broker", "Broker", "select", "fyers", {"mt5", "fyers", "zerodha", "alpaca", "ibkr", "upstox", "dhan"}, ""},
                 {"symbol", "Symbol", "string", "", {}, "", true},
                 {"exchange", "Exchange", "select", "NSE", {"NSE", "BSE", "NFO", "MCX", "CDS", "NASDAQ", "NYSE"}, ""},
                 {"product_type", "Product Type", "select", "delivery", {"delivery", "intraday", "margin", "mtf"}, ""},
@@ -260,7 +260,7 @@ void register_trading_nodes(NodeRegistry& registry) {
         .parameters =
             {
                 {"account_id", "Account ID", "string", "", {}, "Leave blank to use active account for broker"},
-                {"broker", "Broker", "select", "fyers", {"fyers", "zerodha", "alpaca", "ibkr", "upstox", "dhan"}, ""},
+                {"broker", "Broker", "select", "fyers", {"mt5", "fyers", "zerodha", "alpaca", "ibkr", "upstox", "dhan"}, ""},
                 {"symbol", "Symbol", "string", "", {}, "Ticker symbol", true},
                 {"exchange", "Exchange", "select", "NSE", {"NSE", "BSE", "NFO", "MCX", "CDS", "NASDAQ", "NYSE"}, ""},
             },
@@ -281,7 +281,7 @@ void register_trading_nodes(NodeRegistry& registry) {
         .parameters =
             {
                 {"account_id", "Account ID", "string", "", {}, "Leave blank to use active account for broker"},
-                {"broker", "Broker", "select", "fyers", {"fyers", "zerodha", "alpaca", "ibkr", "upstox", "dhan"}, ""},
+                {"broker", "Broker", "select", "fyers", {"mt5", "fyers", "zerodha", "alpaca", "ibkr", "upstox", "dhan"}, ""},
                 {"symbol", "Symbol", "string", "", {}, "Ticker symbol", true},
                 {"exchange", "Exchange", "select", "NSE", {"NSE", "BSE", "NFO", "MCX", "CDS", "NASDAQ", "NYSE"}, ""},
                 {"product", "Product", "select", "", {"", "MIS", "CNC", "NRML"}, "Optional product filter"},
@@ -303,7 +303,7 @@ void register_trading_nodes(NodeRegistry& registry) {
         .parameters =
             {
                 {"account_id", "Account ID", "string", "", {}, "Leave blank to use active account for broker"},
-                {"broker", "Broker", "select", "fyers", {"fyers", "zerodha", "alpaca", "ibkr", "upstox", "dhan"}, ""},
+                {"broker", "Broker", "select", "fyers", {"mt5", "fyers", "zerodha", "alpaca", "ibkr", "upstox", "dhan"}, ""},
                 {"symbol", "Symbol", "string", "", {}, "Ticker symbol", true},
                 {"exchange", "Exchange", "select", "NSE", {"NSE", "BSE", "NFO", "MCX", "CDS", "NASDAQ", "NYSE"}, ""},
                 {"position_size", "Position Size", "number", 0, {}, "Target net position (+long / -short / 0=flatten)", true},
@@ -328,7 +328,7 @@ void register_trading_nodes(NodeRegistry& registry) {
         .parameters =
             {
                 {"account_id", "Account ID", "string", "", {}, "Leave blank to use active account for broker"},
-                {"broker", "Broker", "select", "fyers", {"fyers", "zerodha", "alpaca", "ibkr", "upstox", "dhan"}, ""},
+                {"broker", "Broker", "select", "fyers", {"mt5", "fyers", "zerodha", "alpaca", "ibkr", "upstox", "dhan"}, ""},
             },
         .execute = nullptr,
     });
@@ -347,7 +347,7 @@ void register_trading_nodes(NodeRegistry& registry) {
         .parameters =
             {
                 {"account_id", "Account ID", "string", "", {}, "Leave blank to use active account for broker"},
-                {"broker", "Broker", "select", "fyers", {"fyers", "zerodha", "alpaca", "ibkr", "upstox", "dhan"}, ""},
+                {"broker", "Broker", "select", "fyers", {"mt5", "fyers", "zerodha", "alpaca", "ibkr", "upstox", "dhan"}, ""},
             },
         .execute = nullptr,
     });

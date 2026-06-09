@@ -31,7 +31,7 @@ inline thread_local LlmService::ToolPolicy t_request_policy = LlmService::ToolPo
 // during the otherwise-silent multi-second tool execution phase. Set by
 // do_streaming_request before falling back into the tool loop, cleared on exit.
 using ProgressEmitter = std::function<void(const QString&)>;
-inline thread_local ProgressEmitter t_progress_emitter;
+extern thread_local ProgressEmitter t_progress_emitter;
 
 struct ProgressEmitterGuard {
     ProgressEmitter prev;
@@ -52,7 +52,7 @@ inline void emit_progress(const QString& text) {
 // before calling chat_streaming(), read by MCP tools (e.g. report_session_context)
 // to scope per-chat state — for example, "did this chat session already start a
 // report?" so the model knows whether to continue or start fresh.
-inline thread_local QString t_chat_session_id;
+extern thread_local QString t_chat_session_id;
 
 struct ChatSessionGuard {
     QString prev;

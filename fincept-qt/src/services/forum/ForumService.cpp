@@ -2,6 +2,7 @@
 #include "services/forum/ForumService.h"
 
 #include "auth/AuthManager.h"
+#include "core/config/AppConfig.h"
 #include "core/logging/Logger.h"
 #include "storage/cache/CacheManager.h"
 
@@ -33,10 +34,14 @@ QString ForumService::api_key() const {
     return auth::AuthManager::instance().session().api_key;
 }
 
+QString ForumService::base_url() const {
+    return fincept::AppConfig::instance().api_base_url();
+}
+
 // ── Low-level HTTP helpers ────────────────────────────────────────────────────
 
 void ForumService::get(const QString& path, std::function<void(bool, QJsonObject)> cb) {
-    QNetworkRequest req(QUrl(QString(BASE) + path));
+    QNetworkRequest req(QUrl(base_url() + path));
     req.setRawHeader("X-API-KEY", api_key().toUtf8());
     req.setRawHeader("Accept", "application/json");
     req.setTransferTimeout(kTransferTimeoutMs);
@@ -61,7 +66,7 @@ void ForumService::get(const QString& path, std::function<void(bool, QJsonObject
 }
 
 void ForumService::post_req(const QString& path, const QJsonObject& body, std::function<void(bool, QJsonObject)> cb) {
-    QNetworkRequest req(QUrl(QString(BASE) + path));
+    QNetworkRequest req(QUrl(base_url() + path));
     req.setRawHeader("X-API-KEY", api_key().toUtf8());
     req.setHeader(QNetworkRequest::ContentTypeHeader, "application/json");
     req.setTransferTimeout(kTransferTimeoutMs);
@@ -81,7 +86,7 @@ void ForumService::post_req(const QString& path, const QJsonObject& body, std::f
 }
 
 void ForumService::put_req(const QString& path, const QJsonObject& body, std::function<void(bool, QJsonObject)> cb) {
-    QNetworkRequest req(QUrl(QString(BASE) + path));
+    QNetworkRequest req(QUrl(base_url() + path));
     req.setRawHeader("X-API-KEY", api_key().toUtf8());
     req.setHeader(QNetworkRequest::ContentTypeHeader, "application/json");
     req.setTransferTimeout(kTransferTimeoutMs);
@@ -401,4 +406,3 @@ void ForumService::update_profile(const QString& display_name, const QString& bi
 }
 
 } // namespace fincept::services
-

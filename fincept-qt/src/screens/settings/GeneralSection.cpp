@@ -2,15 +2,20 @@
 
 #include "screens/settings/GeneralSection.h"
 
+#include "core/config/AppConfig.h"
 #include "core/currency/CurrencyManager.h"
 #include "core/i18n/LanguageManager.h"
 #include "core/logging/Logger.h"
+#include "network/http/HttpClient.h"
 #include "screens/settings/SettingsRowHelpers.h"
 #include "screens/settings/SettingsStyles.h"
 #include "storage/repositories/SettingsRepository.h"
 #include "ui/theme/Theme.h"
 
+#include <QHBoxLayout>
 #include <QLabel>
+#include <QLineEdit>
+#include <QPushButton>
 #include <QScrollArea>
 #include <QShowEvent>
 #include <QSignalBlocker>
@@ -117,6 +122,49 @@ void GeneralSection::build_ui() {
 
     vl->addSpacing(20);
 
+    // ── BACKEND API ─────────────────────────────────────────────────────────
+    auto* api_title = new QLabel(tr("BACKEND API"));
+    api_title->setStyleSheet(section_title_ss());
+    vl->addWidget(api_title);
+    vl->addWidget(make_sep());
+    vl->addSpacing(8);
+
+    auto* api_row_widget = new QWidget(this);
+    api_row_widget->setStyleSheet("background:transparent;");
+    auto* api_row = new QHBoxLayout(api_row_widget);
+    api_row->setContentsMargins(0, 0, 0, 0);
+    api_row->setSpacing(8);
+
+    api_base_url_edit_ = new QLineEdit;
+    api_base_url_edit_->setPlaceholderText(QStringLiteral("http://64.235.61.6:8150"));
+    api_base_url_edit_->setStyleSheet(input_ss());
+    api_row->addWidget(api_base_url_edit_, 1);
+
+    auto* save_api_btn = new QPushButton(tr("SAVE"));
+    save_api_btn->setFixedHeight(30);
+    save_api_btn->setStyleSheet(
+        QString("QPushButton{background:%1;color:%2;border:1px solid %3;font-weight:700;padding:0 16px;}"
+                "QPushButton:hover{background:%2;color:%4;}")
+            .arg(ui::colors::BG_RAISED(), ui::colors::AMBER(), ui::colors::AMBER_DIM(), ui::colors::BG_BASE()));
+    connect(save_api_btn, &QPushButton::clicked, this, [this]() {
+        QString url = api_base_url_edit_->text().trimmed();
+        if (url.endsWith('/'))
+            url.chop(1);
+        if (url.isEmpty())
+            url = QStringLiteral("http://localhost:8150");
+        AppConfig::instance().set(QStringLiteral("api/base_url"), url);
+        HttpClient::instance().set_base_url(url);
+        LOG_INFO("Settings", QString("api/base_url -> %1").arg(url));
+    });
+    api_row->addWidget(save_api_btn);
+
+    vl->addWidget(make_row(
+        tr("Backend API URL"),
+        api_row_widget,
+        tr("Use this to point the terminal at your VPS backend. Restarting also picks up the saved value.")));
+
+    vl->addSpacing(20);
+
     // ── CURRENCY ────────────────────────────────────────────────────────────
     auto* cur_title = new QLabel(tr("CURRENCY"));
     cur_title->setStyleSheet(section_title_ss());
@@ -172,6 +220,10 @@ void GeneralSection::reload() {
         const int idx = currency_combo_->findData(cur);
         QSignalBlocker block(currency_combo_);
         currency_combo_->setCurrentIndex(idx >= 0 ? idx : 0);
+    }
+    if (api_base_url_edit_) {
+        QSignalBlocker block(api_base_url_edit_);
+        api_base_url_edit_->setText(AppConfig::instance().api_base_url());
     }
 }
 

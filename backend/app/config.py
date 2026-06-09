@@ -17,6 +17,14 @@ class Settings(BaseSettings):
 
     FRED_API_KEY: str = ""
 
+    MT5_METAEDITOR_PATH: str = ""
+    MT5_EXPERTS_DIR: str = ""
+    MT5_DEV_MODE: bool = False
+    MT5_DIRECT_ENABLED: bool = False
+    MT5_DIRECT_MAGIC: int = 100000
+    MT5_DIRECT_DEVIATION: int = 20
+    MT5_DIRECT_FILLING: str = "FOK"
+
     CORS_ORIGINS: list[str] = ["*"]
 
     class Config:

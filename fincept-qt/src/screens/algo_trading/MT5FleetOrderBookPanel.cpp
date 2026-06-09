@@ -161,7 +161,7 @@ void MT5FleetOrderBookPanel::set_symbol(const QString& symbol) {
 
 void MT5FleetOrderBookPanel::refresh_order_book() {
     HttpClient::instance().get(
-        QString("http://localhost:8150/mt5/market/orderbook?symbol=%1").arg(current_symbol_),
+        QString("/mt5/market/orderbook?symbol=%1").arg(current_symbol_),
         [this](Result<QJsonDocument> result) {
             if (result.is_err()) return;
             auto doc = result.value();
@@ -239,7 +239,7 @@ void MT5FleetOrderBookPanel::on_buy_clicked() {
     payload["side"] = "BUY";
     payload["volume"] = volume;
 
-    HttpClient::instance().post("http://localhost:8150/mt5/order/market", payload,
+    HttpClient::instance().post("/mt5/order/market", payload,
         [this](Result<QJsonDocument> r) {
             if (r.is_err()) { last_price_label_->setText("BUY failed"); return; }
             auto obj = r.value().object();
@@ -268,7 +268,7 @@ void MT5FleetOrderBookPanel::on_sell_clicked() {
     payload["side"] = "SELL";
     payload["volume"] = volume;
 
-    HttpClient::instance().post("http://localhost:8150/mt5/order/market", payload,
+    HttpClient::instance().post("/mt5/order/market", payload,
         [this](Result<QJsonDocument> r) {
             if (r.is_err()) { last_price_label_->setText("SELL failed"); return; }
             auto obj = r.value().object();

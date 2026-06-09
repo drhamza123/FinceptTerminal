@@ -21,7 +21,7 @@ inline void publish_to_hub(const QString& topic, const QVariant& value) {
 }
 }  // namespace
 
-static constexpr const char* kMarineBase = "http://localhost:8150/marine";
+static constexpr const char* kMarineBase = "/marine";
 static constexpr int kVesselTtlSec = 60;      // position data: 1 min
 static constexpr int kHistoryTtlSec = 5 * 60; // history: 5 min
 

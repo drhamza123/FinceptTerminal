@@ -473,14 +473,81 @@ async def delete_mcp_server(mid: str):
 @router.post("/chat")
 async def agent_chat(body: dict):
     query = body.get("query", "")
-    mode = body.get("mode", "lite")
-    auto_approve = body.get("auto_approve", False)
-    logger.info(f"Agent chat [{mode}]: {query[:100]}")
-    return {
-        "success": True,
-        "data": {
-            "response": f"Agent received your query: '{query[:200]}'. Mode: {mode}. Auto-approve: {auto_approve}.",
-            "mode": mode,
-            "session_id": body.get("session_id", ""),
-        },
-    }
+    messages = body.get("messages", [])
+    session_id = body.get("session_id", "")
+    logger.info(f"Agent chat: {query[:100] if query else 'msg count: ' + str(len(messages))}")
+
+    if not messages and query:
+        messages = [{"role": "user", "content": query}]
+
+    from app.config import settings
+    import httpx
+
+    try:
+        async with httpx.AsyncClient(timeout=120) as client:
+            headers = {"Content-Type": "application/json"}
+            api_key = settings.LLM_PROVIDER_API_KEY or ""
+            base_url = settings.LLM_PROVIDER_BASE_URL or "http://localhost:11434/v1"
+            if api_key and api_key != "ollama":
+                headers["Authorization"] = f"Bearer {api_key}"
+
+            resp = await client.post(
+                f"{base_url}/chat/completions",
+                headers=headers,
+                json={
+                    "model": settings.LLM_DEFAULT_MODEL or "llama3.2:1b",
+                    "messages": messages,
+                    "max_tokens": 4096,
+                    "temperature": 0.7,
+                },
+            )
+            data = resp.json()
+            content = data.get("choices", [{}])[0].get("message", {}).get("content", "")
+            return {"success": True, "data": {"response": content, "session_id": session_id}}
+    except Exception as e:
+        logger.error(f"Agent chat error: {e}")
+        return {"success": True, "data": {"response": f"AI error: {e}", "session_id": session_id}}
+
+
+from fastapi.responses import StreamingResponse
+
+@router.post("/stream")
+async def agent_stream(body: dict):
+    query = body.get("query", "")
+    messages = body.get("messages", [])
+    session_id = body.get("session_id", "")
+
+    if not messages and query:
+        messages = [{"role": "user", "content": query}]
+
+    from app.config import settings
+    import httpx
+
+    async def stream():
+        try:
+            async with httpx.AsyncClient(timeout=300) as client:
+                headers = {"Content-Type": "application/json"}
+                api_key = settings.LLM_PROVIDER_API_KEY or ""
+                base_url = settings.LLM_PROVIDER_BASE_URL or "http://localhost:11434/v1"
+                if api_key and api_key != "ollama":
+                    headers["Authorization"] = f"Bearer {api_key}"
+
+                async with client.stream(
+                    "POST",
+                    f"{base_url}/chat/completions",
+                    headers=headers,
+                    json={
+                        "model": settings.LLM_DEFAULT_MODEL or "llama3.2:1b",
+                        "messages": messages,
+                        "max_tokens": 4096,
+                        "temperature": 0.7,
+                        "stream": True,
+                    },
+                ) as resp:
+                    async for line in resp.aiter_lines():
+                        if line.startswith("data: "):
+                            yield line + "\n\n"
+        except Exception as e:
+            yield f"data: {{\"error\": \"{e}\"}}\n\n"
+
+    return StreamingResponse(stream(), media_type="text/event-stream")

@@ -26,6 +26,11 @@
 //  • setMinimumHeight(280) to keep the chart usable on narrow splitters.
 
 #include "screens/crypto_trading/CryptoChart.h"
+#include "screens/crypto_trading/VolumeFootprint.h"
+#include "screens/crypto_trading/RenkoChart.h"
+#include "screens/crypto_trading/PositionSizingTool.h"
+#include "screens/crypto_trading/KagiChart.h"
+#include "screens/crypto_trading/PointFigureChart.h"
 
 #include "ui/charts/CandleData.h"
 #include "ui/charts/ChartOverlayManager.h"
@@ -73,6 +78,19 @@ using namespace fincept::ui;
 namespace fincept::screens::crypto {
 
 constexpr const char* CryptoChart::TF_LABELS[];
+
+QString CryptoChart::tf_label_to_backend(const QString& lbl) {
+    static const QHash<QString, QString> map = {
+        {"M1","1m"},{"M2","2m"},{"M3","3m"},{"M4","4m"},{"M5","5m"},{"M6","6m"},
+        {"M10","10m"},{"M12","12m"},{"M15","15m"},{"M20","20m"},
+        {"H1","1h"},{"H2","2h"},{"H3","3h"},{"H4","4h"},{"H6","6h"},{"H8","8h"},{"H12","12h"},
+        {"D1","1d"},{"D2","2d"},{"D3","3d"},{"D5","5d"},
+        {"W1","1w"},{"W2","2w"},{"W3","3w"},
+        {"MN1","1mn"},{"MN2","2mn"},{"MN3","3mn"},{"MN6","6mn"},
+        {"Y1","1y"},{"Y2","2y"},{"Y5","5y"},
+    };
+    return map.value(lbl, "1h");
+}
 
 namespace {
 
@@ -172,15 +190,68 @@ CryptoChart::CryptoChart(QWidget* parent) : QWidget(parent) {
     h_layout->addWidget(title);
     h_layout->addSpacing(8);
 
-    for (int i = 0; i < 6; ++i) {
+    for (int i = 0; i < 31; ++i) {
         tf_buttons_[i] = new QPushButton(TF_LABELS[i]);
         tf_buttons_[i]->setObjectName("cryptoTfBtn");
         tf_buttons_[i]->setCursor(Qt::PointingHandCursor);
         tf_buttons_[i]->setFocusPolicy(Qt::NoFocus);
+        tf_buttons_[i]->setFixedWidth(32);
+        tf_buttons_[i]->setFixedHeight(20);
         if (i == active_tf_) tf_buttons_[i]->setProperty("active", true);
+        if (i > 0 && i % 10 == 0) {
+            // new row after every 10 TFs
+        }
         connect(tf_buttons_[i], &QPushButton::clicked, this, [this, i]() { set_active_tf(i); });
         h_layout->addWidget(tf_buttons_[i]);
     }
+    h_layout->addSpacing(12);
+
+    // Volume Footprint toggle
+    vfp_toggle_ = new QPushButton("VFP");
+    vfp_toggle_->setObjectName("cryptoTfBtn");
+    vfp_toggle_->setCursor(Qt::PointingHandCursor);
+    vfp_toggle_->setToolTip("Volume Footprint — intra-bar bid/ask delta");
+    connect(vfp_toggle_, &QPushButton::clicked, this, &CryptoChart::toggle_vfp);
+    h_layout->addWidget(vfp_toggle_);
+
+    // Renko toggle
+    renko_toggle_ = new QPushButton("RENKO");
+    renko_toggle_->setObjectName("cryptoTfBtn");
+    renko_toggle_->setCursor(Qt::PointingHandCursor);
+    renko_toggle_->setToolTip("Renko bricks — non-time-based price movement");
+    connect(renko_toggle_, &QPushButton::clicked, this, &CryptoChart::toggle_renko);
+    h_layout->addWidget(renko_toggle_);
+
+    // Chart mode toggle
+    chart_mode_btn_ = new QPushButton("CANDLE");
+    chart_mode_btn_->setObjectName("cryptoTfBtn");
+    chart_mode_btn_->setCursor(Qt::PointingHandCursor);
+    chart_mode_btn_->setToolTip("Cycle chart mode: Candle → Renko → Kagi → P&F");
+    connect(chart_mode_btn_, &QPushButton::clicked, this, &CryptoChart::cycle_chart_mode);
+    h_layout->addWidget(chart_mode_btn_);
+
+    // Kagi toggle
+    kagi_toggle_ = new QPushButton("KAGI");
+    kagi_toggle_->setObjectName("cryptoTfBtn");
+    kagi_toggle_->setCursor(Qt::PointingHandCursor);
+    connect(kagi_toggle_, &QPushButton::clicked, this, &CryptoChart::toggle_kagi);
+    h_layout->addWidget(kagi_toggle_);
+
+    // Point & Figure toggle
+    pnf_toggle_ = new QPushButton("P&F");
+    pnf_toggle_->setObjectName("cryptoTfBtn");
+    pnf_toggle_->setCursor(Qt::PointingHandCursor);
+    connect(pnf_toggle_, &QPushButton::clicked, this, &CryptoChart::toggle_pnf);
+    h_layout->addWidget(pnf_toggle_);
+
+    // Position Sizing toggle
+    auto* sizing_btn = new QPushButton("SIZE");
+    sizing_btn->setObjectName("cryptoTfBtn");
+    sizing_btn->setCursor(Qt::PointingHandCursor);
+    sizing_btn->setToolTip("Position Sizing Calculator");
+    connect(sizing_btn, &QPushButton::clicked, this, &CryptoChart::toggle_sizing);
+    h_layout->addWidget(sizing_btn);
+
     h_layout->addStretch();
     layout->addWidget(header);
 
@@ -339,7 +410,7 @@ CryptoChart::CryptoChart(QWidget* parent) : QWidget(parent) {
 }
 
 void CryptoChart::set_active_tf(int idx) {
-    for (int i = 0; i < 6; ++i) {
+    for (int i = 0; i < 31; ++i) {
         tf_buttons_[i]->setProperty("active", i == idx);
         if (auto* st = tf_buttons_[i]->style()) {
             st->unpolish(tf_buttons_[i]);
@@ -731,6 +802,127 @@ void CryptoChart::on_hover_leave() {
     // Bring the always-visible last-price tag back now that the cursor's
     // gone — recompute in case anything moved while we were hovering.
     update_last_price_marker();
+}
+
+// ── Volume Footprint Toggle ─────────────────────────────────────────────────
+
+void CryptoChart::toggle_vfp() {
+    if (!vfp_widget_) {
+        vfp_widget_ = new VolumeFootprint(this);
+        vfp_widget_->set_candles(candles_);
+        // Insert above bottom panel
+        auto* parent_layout = qobject_cast<QVBoxLayout*>(layout());
+        if (parent_layout)
+            parent_layout->insertWidget(parent_layout->count() - 1, vfp_widget_);
+        vfp_toggle_->setProperty("active", true);
+        vfp_toggle_->style()->unpolish(vfp_toggle_);
+        vfp_toggle_->style()->polish(vfp_toggle_);
+    } else {
+        vfp_widget_->deleteLater();
+        vfp_widget_ = nullptr;
+        vfp_toggle_->setProperty("active", false);
+        vfp_toggle_->style()->unpolish(vfp_toggle_);
+        vfp_toggle_->style()->polish(vfp_toggle_);
+    }
+}
+
+void CryptoChart::toggle_renko() {
+    if (!renko_widget_) {
+        renko_widget_ = new RenkoChart(this);
+        renko_widget_->set_candles(candles_);
+        renko_widget_->set_active(true);
+        auto* parent_layout = qobject_cast<QVBoxLayout*>(layout());
+        if (parent_layout)
+            parent_layout->insertWidget(parent_layout->count() - 1, renko_widget_);
+        renko_toggle_->setProperty("active", true);
+        renko_toggle_->style()->unpolish(renko_toggle_);
+        renko_toggle_->style()->polish(renko_toggle_);
+    } else {
+        renko_widget_->deleteLater();
+        renko_widget_ = nullptr;
+        renko_toggle_->setProperty("active", false);
+        renko_toggle_->style()->unpolish(renko_toggle_);
+        renko_toggle_->style()->polish(renko_toggle_);
+    }
+}
+
+void CryptoChart::cycle_chart_mode() {
+    chart_mode_ = (chart_mode_ + 1) % 4; // 0=candle, 1=renko, 2=kagi, 3=pnf
+    const char* labels[] = {"CANDLE", "RENKO", "KAGI", "P&F"};
+    chart_mode_btn_->setText(labels[chart_mode_]);
+    chart_mode_btn_->setProperty("active", chart_mode_ != 0);
+    chart_mode_btn_->style()->unpolish(chart_mode_btn_);
+    chart_mode_btn_->style()->polish(chart_mode_btn_);
+
+    // Show/hide alternative chart widgets based on mode
+    if (chart_mode_ == 0) {
+        // Candle mode: show normal chart
+        if (series_) series_->show();
+        if (renko_widget_) renko_widget_->hide();
+        if (kagi_widget_) kagi_widget_->hide();
+        if (pnf_widget_) pnf_widget_->hide();
+    } else if (chart_mode_ == 1) {
+        toggle_renko();
+    } else if (chart_mode_ == 2) {
+        toggle_kagi();
+    } else if (chart_mode_ == 3) {
+        toggle_pnf();
+    }
+}
+
+void CryptoChart::toggle_kagi() {
+    if (!kagi_widget_) {
+        kagi_widget_ = new KagiChart(this);
+        kagi_widget_->set_candles(candles_);
+        kagi_widget_->set_active(true);
+        auto* pl = qobject_cast<QVBoxLayout*>(layout());
+        if (pl) pl->insertWidget(pl->count() - 1, kagi_widget_);
+        kagi_toggle_->setProperty("active", true);
+        kagi_toggle_->style()->unpolish(kagi_toggle_);
+        kagi_toggle_->style()->polish(kagi_toggle_);
+        if (series_) series_->hide();
+    } else {
+        kagi_widget_->deleteLater(); kagi_widget_ = nullptr;
+        kagi_toggle_->setProperty("active", false);
+        kagi_toggle_->style()->unpolish(kagi_toggle_);
+        kagi_toggle_->style()->polish(kagi_toggle_);
+        if (series_) series_->show();
+    }
+}
+
+void CryptoChart::toggle_pnf() {
+    if (!pnf_widget_) {
+        pnf_widget_ = new PointFigureChart(this);
+        pnf_widget_->set_candles(candles_);
+        pnf_widget_->set_active(true);
+        auto* pl = qobject_cast<QVBoxLayout*>(layout());
+        if (pl) pl->insertWidget(pl->count() - 1, pnf_widget_);
+        pnf_toggle_->setProperty("active", true);
+        pnf_toggle_->style()->unpolish(pnf_toggle_);
+        pnf_toggle_->style()->polish(pnf_toggle_);
+        if (series_) series_->hide();
+    } else {
+        pnf_widget_->deleteLater(); pnf_widget_ = nullptr;
+        pnf_toggle_->setProperty("active", false);
+        pnf_toggle_->style()->unpolish(pnf_toggle_);
+        pnf_toggle_->style()->polish(pnf_toggle_);
+        if (series_) series_->show();
+    }
+}
+
+void CryptoChart::toggle_sizing() {
+    if (!sizing_tool_) {
+        sizing_tool_ = new PositionSizingTool(this);
+        if (!candles_.isEmpty())
+            sizing_tool_->set_current_price(candles_.last().close);
+        // Show as a floating panel or insert into layout
+        auto* parent_layout = qobject_cast<QVBoxLayout*>(layout());
+        if (parent_layout)
+            parent_layout->insertWidget(parent_layout->count() - 1, sizing_tool_);
+    } else {
+        sizing_tool_->deleteLater();
+        sizing_tool_ = nullptr;
+    }
 }
 
 } // namespace fincept::screens::crypto

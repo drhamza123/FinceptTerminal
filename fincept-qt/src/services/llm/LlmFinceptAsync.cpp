@@ -137,8 +137,9 @@ LlmResponse LlmService::fincept_async_request(const QString& user_message,
     // Temperature intentionally omitted — Fincept backend uses its own default.
 
     auto hdr = get_headers();
-    const QString async_url   = "http://localhost:8150/research/llm/async";
-    const QString status_base = "http://localhost:8150/research/llm/status/";
+    const QString api_base = fincept::AppConfig::instance().api_base_url();
+    const QString async_url   = api_base + QStringLiteral("/research/llm/async");
+    const QString status_base = api_base + QStringLiteral("/research/llm/status/");
 
     LOG_INFO(kLlmFinceptTag, QString("Guardian async: submitting to %1 (api_key=%2, prompt_len=%3)")
                       .arg(async_url)

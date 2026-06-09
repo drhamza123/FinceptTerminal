@@ -36,7 +36,7 @@ endif()
 project(FinceptTerminal VERSION 4.0.3 LANGUAGES C CXX)
 
 # Strip C/C++ flags out of RC invocations — rc.exe only understands /D, /I, /fo.
-if(WIN32)
+if(WIN32 AND MSVC)
     set(CMAKE_RC_FLAGS "/nologo" CACHE STRING "" FORCE)
     set(CMAKE_RC_FLAGS_RELEASE "" CACHE STRING "" FORCE)
     set(CMAKE_RC_FLAGS_DEBUG "" CACHE STRING "" FORCE)
@@ -50,6 +50,7 @@ set(CMAKE_CXX_EXTENSIONS OFF)
 set(CMAKE_AUTOMOC ON)
 set(CMAKE_AUTORCC ON)
 set(CMAKE_AUTOUIC ON)
+set(CMAKE_AUTOMOC_COMPILER_PREDEFINES OFF)
 
 # ── Pinned toolchain enforcement ─────────────────────────────────────────────
 # Fincept Terminal ships on 3 platforms and cannot tolerate compiler-version
@@ -166,7 +167,10 @@ set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 # ── Build performance ─────────────────────────────────────────────────────────
 # Unity build for infrastructure layers (safe — no local symbol conflicts)
 # Screens are excluded below via SKIP_UNITY_BUILD_INCLUSION (too many local statics/functions)
-set(CMAKE_UNITY_BUILD ON)
+set(CMAKE_UNITY_BUILD OFF)
+# Unity builds disabled for MinGW compatibility — inline thread_local
+# variables (e.g. LlmRequestPolicy.h) generate TLS init functions that
+# conflict when multiple .cpp files are batched together.
 set(CMAKE_UNITY_BUILD_BATCH_SIZE 20)
 
 # FetchContent: default to skipping the update step after first download to cut
@@ -179,14 +183,24 @@ set(FETCHCONTENT_UPDATES_DISCONNECTED ON CACHE BOOL "Skip FetchContent update st
 
 # ── ZeroMQ (ultra-low latency MT5 bridge) ──────────────────────────────────
 find_path(MSGPACK_INCLUDE_DIR msgpack.hpp)
-find_library(ZMQ_LIB zmq)
+find_library(ZMQ_LIB
+    NAMES zmq libzmq
+    HINTS
+        "C:/Users/AHMADP~1/AppData/Local/Temp/opencode/libzmq/lib"
+        "C:/Users/AHMADP~1/AppData/Local/Temp/opencode"
+        "C:/msys64/mingw64/lib")
+find_path(ZMQ_INCLUDE_DIR zmq.hpp HINTS "C:/Users/AHMADP~1/AppData/Local/Temp/opencode/cppzmq" "C:/msys64/mingw64/include")
+find_path(ZMQ_C_INCLUDE_DIR zmq.h HINTS "C:/Users/AHMADP~1/AppData/Local/Temp/opencode/libzmq/include" "C:/msys64/mingw64/include")
 if(ZMQ_LIB)
     add_library(ZMQ::ZMQ UNKNOWN IMPORTED)
     set_target_properties(ZMQ::ZMQ PROPERTIES IMPORTED_LOCATION "${ZMQ_LIB}")
-    find_path(ZMQ_INCLUDE_DIR zmq.hpp)
-    if(ZMQ_INCLUDE_DIR)
-        set_target_properties(ZMQ::ZMQ PROPERTIES INTERFACE_INCLUDE_DIRECTORIES "${ZMQ_INCLUDE_DIR}")
+    if(ZMQ_INCLUDE_DIR OR ZMQ_C_INCLUDE_DIR)
+        set_target_properties(ZMQ::ZMQ PROPERTIES INTERFACE_INCLUDE_DIRECTORIES "${ZMQ_INCLUDE_DIR};${ZMQ_C_INCLUDE_DIR}")
     endif()
+elseif(ZMQ_INCLUDE_DIR)
+    # Header-only fallback (cppzmq headers only, libzmq used at runtime)
+    add_library(ZMQ::ZMQ INTERFACE IMPORTED)
+    set_target_properties(ZMQ::ZMQ PROPERTIES INTERFACE_INCLUDE_DIRECTORIES "${ZMQ_INCLUDE_DIR}")
 endif()
 
 # ── LTO (whole-program optimisation) ─────────────────────────────────────────
@@ -923,6 +937,7 @@ set(MCP_SOURCES
     src/mcp/tools/PaperTradingTools.cpp
     src/mcp/tools/LiveTradingTools.cpp
     src/mcp/tools/EdgarTools.cpp
+    src/mcp/tools/AlgoEngineTools.cpp
     src/mcp/tools/MAAnalyticsTools.cpp
     src/mcp/tools/AltInvestmentsTools.cpp
     src/mcp/tools/DataSourcesTools.cpp
@@ -982,6 +997,15 @@ set(TRADING_SOURCES
     src/trading/exchanges/kraken/KrakenSymbolMapper.cpp
     src/trading/exchanges/kraken/KrakenBook.cpp
     src/trading/exchanges/kraken/KrakenWsClient.cpp
+    # Massive.com real-time market data client
+    src/trading/exchanges/massive/MassiveWsClient.cpp
+    # Volume Footprint, Renko Chart, Position Sizing
+    src/screens/crypto_trading/VolumeFootprint.cpp
+    src/screens/crypto_trading/RenkoChart.cpp
+    src/screens/crypto_trading/PositionSizingTool.cpp
+    src/screens/crypto_trading/KagiChart.cpp
+    src/screens/crypto_trading/PointFigureChart.cpp
+    src/screens/crypto_trading/DomView.h
     # Hyperliquid (Alpha Arena live mode — Phase 5c partial)
     src/trading/exchanges/hyperliquid/HyperliquidClient.cpp
     src/trading/exchanges/hyperliquid/Keccak256.cpp
@@ -1074,6 +1098,7 @@ set(ALGO_ENGINE_SOURCES
     src/algo_engine/AlgoScanner.cpp
     src/algo_engine/CandleDataFetcher.cpp
     src/algo_engine/BacktestEngine.cpp
+    src/algo_engine/RegimeDetector.cpp
 )
 
 # Services
@@ -2445,6 +2470,7 @@ set_source_files_properties(
     src/mcp/tools/CryptoTradingTools.cpp
     src/mcp/tools/PaperTradingTools.cpp
     src/mcp/tools/LiveTradingTools.cpp
+    src/mcp/tools/AlgoEngineTools.cpp
     src/mcp/tools/EdgarTools.cpp
     src/mcp/tools/MAAnalyticsTools.cpp
     src/mcp/tools/AltInvestmentsTools.cpp
@@ -2602,7 +2628,7 @@ if(WIN32)
         "${CMAKE_CURRENT_SOURCE_DIR}/resources/fincept.ico"
         "${CMAKE_CURRENT_BINARY_DIR}/fincept.ico"
         COPYONLY)
-    set(_FINCEPT_PLATFORM_SOURCES "${CMAKE_CURRENT_BINARY_DIR}/app.rc")
+    # set(_FINCEPT_PLATFORM_SOURCES "${CMAKE_CURRENT_BINARY_DIR}/app.rc")
 elseif(APPLE)
     set(_FINCEPT_EXE_FLAGS MACOSX_BUNDLE)
     set(_FINCEPT_PLATFORM_SOURCES "")
@@ -2959,8 +2985,8 @@ target_include_directories(FinceptTerminal PRIVATE
     "${md4c_SOURCE_DIR}/src"
     ${MSGPACK_INCLUDE_DIR}
 )
-if(ZMQ_LIB)
-    target_include_directories(FinceptTerminal PRIVATE ${ZMQ_INCLUDE_DIR})
+if(ZMQ_LIB OR ZMQ_INCLUDE_DIR)
+    target_include_directories(FinceptTerminal PRIVATE ${ZMQ_INCLUDE_DIR} ${ZMQ_C_INCLUDE_DIR})
 endif()
 target_link_libraries(FinceptTerminal PRIVATE
     Qt6::Widgets
@@ -2992,7 +3018,7 @@ endif()
 # Windows: link dbghelp for the crash-handler minidump writer (see
 # src/core/crash/CrashHandler.cpp).
 if(WIN32)
-    target_link_libraries(FinceptTerminal PRIVATE dbghelp)
+    target_link_libraries(FinceptTerminal PRIVATE dbghelp iphlpapi)
 endif()
 
 # Copy OpenSSL DLLs to build output — Windows only
@@ -3044,7 +3070,8 @@ endif()
 # FINCEPT_VERSION_STRING is consumed by main.cpp so QApplication::applicationVersion()
 # always matches the project() VERSION declared at the top of this file.
 target_compile_definitions(FinceptTerminal PRIVATE
-    FINCEPT_VERSION_STRING="${CMAKE_PROJECT_VERSION}")
+    FINCEPT_VERSION_STRING="${CMAKE_PROJECT_VERSION}"
+    MSGPACK_NO_BOOST)
 
 # ── Optional feature compile definitions (applied after add_executable) ──────
 if(FINCEPT_HAS_PRIVATE_HEADERS)

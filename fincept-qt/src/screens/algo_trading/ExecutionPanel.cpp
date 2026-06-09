@@ -23,7 +23,7 @@ ExecutionPanel::~ExecutionPanel() { timer_->stop(); }
 
 void ExecutionPanel::build_ui() {
     auto* root = new QVBoxLayout(this); root->setContentsMargins(6,6,6,6); root->setSpacing(6);
-    setFixedWidth(320);
+    setMinimumWidth(260);
 
     // ── Account Info ──
     auto* acct = new QGroupBox("Account", this);
@@ -94,6 +94,15 @@ void ExecutionPanel::build_ui() {
     ord_table_->setMaximumHeight(150);
     root->addWidget(new QLabel("Open Orders:", this));
     root->addWidget(ord_table_);
+
+    scripts_table_ = new QTableWidget(0, 6, this);
+    scripts_table_->setHorizontalHeaderLabels({"Name","Lang","Target","Status","Run","Stop"});
+    scripts_table_->setEditTriggers(QAbstractItemView::NoEditTriggers);
+    scripts_table_->horizontalHeader()->setStretchLastSection(true);
+    scripts_table_->verticalHeader()->setVisible(false);
+    scripts_table_->setMaximumHeight(180);
+    root->addWidget(new QLabel("Deployed Scripts:", this));
+    root->addWidget(scripts_table_);
 }
 
 void ExecutionPanel::place_order() {
@@ -117,7 +126,7 @@ void ExecutionPanel::place_order() {
     if (type == "TRAIL") endpoint = "trailing-stop";
 
     HttpClient::instance().post(
-        QString("http://localhost:8150/mt5/order/%1").arg(endpoint), body,
+        QString("/mt5/order/%1").arg(endpoint), body,
         [this, side](Result<QJsonDocument> r) {
             if (r.is_ok()) {
                 auto obj = r.value().object();
@@ -132,24 +141,35 @@ void ExecutionPanel::place_order() {
 
 void ExecutionPanel::close_position(const QString& symbol) {
     QJsonObject body; body["symbol"] = symbol; body["side"] = "SELL"; body["volume"] = 0;
-    HttpClient::instance().post("http://localhost:8150/mt5/order/market", body,
+    HttpClient::instance().post("/mt5/order/market", body,
         [this](Result<QJsonDocument>) { refresh(); }, this);
 }
 
 void ExecutionPanel::cancel_order(const QString& orderId) {
     QJsonObject body; body["order_id"] = orderId;
-    HttpClient::instance().post("http://localhost:8150/mt5/order/cancel", body,
+    HttpClient::instance().post("/mt5/order/cancel", body,
         [this](Result<QJsonDocument>) { refresh(); }, this);
+}
+
+void ExecutionPanel::run_script(const QString& deploymentId) {
+    HttpClient::instance().post(QString("/execution/scripts/%1/run").arg(deploymentId), {},
+        [this](Result<QJsonDocument>) { fetch_scripts(); }, this);
+}
+
+void ExecutionPanel::stop_script(const QString& deploymentId) {
+    HttpClient::instance().post(QString("/execution/scripts/%1/stop").arg(deploymentId), {},
+        [this](Result<QJsonDocument>) { fetch_scripts(); }, this);
 }
 
 void ExecutionPanel::refresh() {
     fetch_account();
     fetch_positions();
     fetch_orders();
+    fetch_scripts();
 }
 
 void ExecutionPanel::fetch_account() {
-    HttpClient::instance().get("http://localhost:8150/mt5/account",
+    HttpClient::instance().get("/mt5/account",
         [this](Result<QJsonDocument> r) {
             if (!r.is_ok()) return;
             auto d = r.value().object()["data"].toObject();
@@ -160,7 +180,7 @@ void ExecutionPanel::fetch_account() {
 }
 
 void ExecutionPanel::fetch_positions() {
-    HttpClient::instance().get("http://localhost:8150/mt5/positions",
+    HttpClient::instance().get("/mt5/positions",
         [this](Result<QJsonDocument> r) {
             if (!r.is_ok()) return;
             auto arr = r.value().object()["data"].toArray();
@@ -185,7 +205,7 @@ void ExecutionPanel::fetch_positions() {
 }
 
 void ExecutionPanel::fetch_orders() {
-    HttpClient::instance().get("http://localhost:8150/mt5/orders",
+    HttpClient::instance().get("/mt5/orders",
         [this](Result<QJsonDocument> r) {
             if (!r.is_ok()) return;
             auto arr = r.value().object()["data"].toArray();
@@ -201,6 +221,39 @@ void ExecutionPanel::fetch_orders() {
                 cancel_btn->setStyleSheet("background:#ef4444;color:#fff;padding:2px 6px;font-size:9px;");
                 connect(cancel_btn, &QPushButton::clicked, this, [this, oid]() { cancel_order(oid); });
                 ord_table_->setCellWidget(i, 4, cancel_btn);
+            }
+        }, this);
+}
+
+void ExecutionPanel::fetch_scripts() {
+    HttpClient::instance().get("/execution/scripts",
+        [this](Result<QJsonDocument> r) {
+            if (!r.is_ok() || !scripts_table_) return;
+            auto arr = r.value().object()["data"].toArray();
+            scripts_table_->setRowCount(arr.size());
+            for (int i = 0; i < arr.size(); ++i) {
+                auto s = arr[i].toObject();
+                const QString id = s["id"].toString();
+                const QString lang = s["language"].toString().toUpper();
+                const QString status = s["status"].toString();
+                scripts_table_->setItem(i, 0, new QTableWidgetItem(s["name"].toString()));
+                scripts_table_->setItem(i, 1, new QTableWidgetItem(lang));
+                scripts_table_->setItem(i, 2, new QTableWidgetItem(s["target"].toString()));
+                auto* status_item = new QTableWidgetItem(status);
+                status_item->setForeground(status == "running" ? QColor("#22c55e") : QColor("#e5e5e5"));
+                scripts_table_->setItem(i, 3, status_item);
+
+                auto* run_btn = new QPushButton(lang == "MQL5" ? "MT5" : "Run", this);
+                run_btn->setEnabled(lang != "MQL5");
+                run_btn->setStyleSheet("background:#22c55e;color:#080808;padding:2px 8px;font-size:10px;");
+                connect(run_btn, &QPushButton::clicked, this, [this, id]() { run_script(id); });
+                scripts_table_->setCellWidget(i, 4, run_btn);
+
+                auto* stop_btn = new QPushButton("Stop", this);
+                stop_btn->setEnabled(status == "running");
+                stop_btn->setStyleSheet("background:#ef4444;color:#fff;padding:2px 8px;font-size:10px;");
+                connect(stop_btn, &QPushButton::clicked, this, [this, id]() { stop_script(id); });
+                scripts_table_->setCellWidget(i, 5, stop_btn);
             }
         }, this);
 }

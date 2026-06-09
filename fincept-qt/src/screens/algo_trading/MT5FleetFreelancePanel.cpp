@@ -126,7 +126,7 @@ void MT5FleetFreelancePanel::apply_theme() {
 }
 
 void MT5FleetFreelancePanel::refresh_projects() {
-    QString url = "http://localhost:8150/freelance/projects";
+    QString url = "/freelance/projects";
     QString cat = category_combo_->currentText();
     if (cat != "All") url += "?category=" + cat;
     QString search = search_input_->text().trimmed();
@@ -152,7 +152,7 @@ void MT5FleetFreelancePanel::refresh_projects() {
 }
 
 void MT5FleetFreelancePanel::refresh_developers() {
-    HttpClient::instance().get("http://localhost:8150/freelance/developers", [this](Result<QJsonDocument> r) {
+    HttpClient::instance().get("/freelance/developers", [this](Result<QJsonDocument> r) {
         if (r.is_err()) return;
         auto arr = r.value().object()["data"].toArray();
         developers_table_->setRowCount(arr.size());

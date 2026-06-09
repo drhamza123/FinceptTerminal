@@ -1,6 +1,8 @@
 #include "services/markets/MarketDataService.h"
 
+#include "core/config/AppConfig.h"
 #include "core/logging/Logger.h"
+#include "network/http/HttpClient.h"
 #include "python/PythonRunner.h"
 #include "python/PythonWorker.h"
 #include "storage/cache/CacheManager.h"
@@ -16,6 +18,7 @@
 #include <QJsonObject>
 #include <QPointer>
 #include <QSet>
+#include <QUrlQuery>
 
 #include <memory>
 
@@ -59,8 +62,7 @@ void MarketDataService::refresh(const QStringList& topics) {
 
     QStringList quote_syms;
     QStringList spark_syms;
-    struct HistReq { QString topic; QString symbol; QString period; QString interval; };
-    QVector<HistReq> hist_reqs;
+    QVector<HistoryRequest> hist_reqs;
     for (const auto& t : topics) {
         if (t.startsWith(kQuote)) {
             quote_syms.append(t.mid(kQuote.size()));
@@ -105,6 +107,19 @@ void MarketDataService::refresh(const QStringList& topics) {
 
     if (payload.isEmpty()) {
         return;  // Nothing to fetch — hub guarantees this won't happen in practice.
+    }
+
+    const QString provider =
+        fincept::AppConfig::instance().get(QStringLiteral("data/market_data_provider"),
+                                           QStringLiteral("mt5")).toString().toLower();
+    if (provider != QStringLiteral("yfinance") && provider != QStringLiteral("python")) {
+        LOG_INFO("MarketData",
+                 QString("MT5 live DataHub refresh quotes=%1 sparks=%2 histories=%3")
+                     .arg(quote_syms.size())
+                     .arg(spark_syms.size())
+                     .arg(hist_reqs.size()));
+        refresh_mt5_live(quote_syms, spark_syms, hist_reqs);
+        return;
     }
 
     QPointer<MarketDataService> self = this;
@@ -288,6 +303,137 @@ void MarketDataService::refresh(const QStringList& topics) {
         });
 }
 
+void MarketDataService::refresh_mt5_live(const QStringList& quote_syms, const QStringList& spark_syms,
+                                         const QVector<HistoryRequest>& history_reqs) {
+    if (!quote_syms.isEmpty()) {
+        QUrlQuery query;
+        query.addQueryItem(QStringLiteral("symbols"), quote_syms.join(QLatin1Char(',')));
+        const QString url = QStringLiteral("/market/quotes?") + query.toString(QUrl::FullyEncoded);
+        QPointer<MarketDataService> self = this;
+        fincept::HttpClient::instance().get(
+            url,
+            [self, quote_syms](Result<QJsonDocument> r) {
+                auto& hub = datahub::DataHub::instance();
+                if (!self || r.is_err()) {
+                    for (const auto& s : quote_syms)
+                        hub.publish_error(QStringLiteral("market:quote:") + s,
+                                          QStringLiteral("MT5 quote request failed"));
+                    return;
+                }
+
+                const QJsonObject root = r.value().object();
+                if (!root.value(QStringLiteral("success")).toBool()) {
+                    const QString err = root.value(QStringLiteral("error")).toString(QStringLiteral("MT5 quotes unavailable"));
+                    for (const auto& s : quote_syms)
+                        hub.publish_error(QStringLiteral("market:quote:") + s, err.left(200));
+                    return;
+                }
+
+                QSet<QString> seen;
+                const QJsonArray rows = root.value(QStringLiteral("data")).toArray();
+                for (const auto& v : rows) {
+                    const QJsonObject q = v.toObject();
+                    const QString sym = q.value(QStringLiteral("symbol")).toString();
+                    if (sym.isEmpty())
+                        continue;
+                    seen.insert(sym);
+                    QuoteData qd{
+                        sym,
+                        q.value(QStringLiteral("name")).toString(sym),
+                        q.value(QStringLiteral("price")).toDouble(),
+                        q.value(QStringLiteral("change")).toDouble(),
+                        q.value(QStringLiteral("change_percent")).toDouble(),
+                        q.value(QStringLiteral("high")).toDouble(),
+                        q.value(QStringLiteral("low")).toDouble(),
+                        q.value(QStringLiteral("volume")).toDouble()};
+                    self->publish_quote_to_hub(qd);
+                }
+                for (const auto& s : quote_syms) {
+                    if (!seen.contains(s.toUpper()))
+                        hub.publish_error(QStringLiteral("market:quote:") + s,
+                                          QStringLiteral("MT5 symbol unavailable"));
+                }
+            },
+            this);
+    }
+
+    auto request_ohlc = [this](const QString& topic, const QString& symbol, const QString& timeframe,
+                               int count, bool sparkline) {
+        QUrlQuery query;
+        query.addQueryItem(QStringLiteral("symbol"), symbol);
+        query.addQueryItem(QStringLiteral("timeframe"), timeframe);
+        query.addQueryItem(QStringLiteral("count"), QString::number(count));
+        const QString url = QStringLiteral("/market/ohlc?") + query.toString(QUrl::FullyEncoded);
+        QPointer<MarketDataService> self = this;
+        fincept::HttpClient::instance().get(
+            url,
+            [self, topic, symbol, sparkline](Result<QJsonDocument> r) {
+                auto& hub = datahub::DataHub::instance();
+                if (!self || r.is_err()) {
+                    hub.publish_error(topic, QStringLiteral("MT5 OHLC request failed"));
+                    return;
+                }
+                const QJsonObject root = r.value().object();
+                if (!root.value(QStringLiteral("success")).toBool()) {
+                    hub.publish_error(topic, root.value(QStringLiteral("error")).toString(QStringLiteral("MT5 OHLC unavailable")).left(200));
+                    return;
+                }
+                const QJsonArray rows = root.value(QStringLiteral("data")).toArray();
+                if (rows.isEmpty()) {
+                    hub.publish_error(topic, QStringLiteral("MT5 returned no bars"));
+                    return;
+                }
+                if (sparkline) {
+                    QVector<double> closes;
+                    closes.reserve(rows.size());
+                    for (const auto& v : rows)
+                        closes.append(v.toObject().value(QStringLiteral("close")).toDouble());
+                    self->publish_sparkline_to_hub(symbol, closes);
+                    return;
+                }
+
+                QVector<HistoryPoint> points;
+                points.reserve(rows.size());
+                for (const auto& v : rows) {
+                    const QJsonObject o = v.toObject();
+                    points.append({
+                        static_cast<qint64>(o.value(QStringLiteral("time")).toDouble()),
+                        o.value(QStringLiteral("open")).toDouble(),
+                        o.value(QStringLiteral("high")).toDouble(),
+                        o.value(QStringLiteral("low")).toDouble(),
+                        o.value(QStringLiteral("close")).toDouble(),
+                        static_cast<qint64>(o.value(QStringLiteral("volume")).toDouble())});
+                }
+                hub.publish(topic, QVariant::fromValue(points));
+            },
+            this);
+    };
+
+    for (const auto& symbol : spark_syms)
+        request_ohlc(QStringLiteral("market:sparkline:") + symbol, symbol, QStringLiteral("H1"), 48, true);
+
+    auto timeframe_for = [](const QString& interval) {
+        if (interval == QStringLiteral("1wk")) return QStringLiteral("W1");
+        if (interval == QStringLiteral("1mo")) return QStringLiteral("MN1");
+        if (interval == QStringLiteral("1d")) return QStringLiteral("D1");
+        if (interval == QStringLiteral("5m")) return QStringLiteral("M5");
+        if (interval == QStringLiteral("15m")) return QStringLiteral("M15");
+        return QStringLiteral("H1");
+    };
+    auto count_for = [](const QString& period, const QString& interval) {
+        if (period == QStringLiteral("5y")) return interval == QStringLiteral("1mo") ? 60 : 1300;
+        if (period == QStringLiteral("2y")) return interval == QStringLiteral("1wk") ? 110 : 520;
+        if (period == QStringLiteral("1y")) return interval == QStringLiteral("1wk") ? 60 : 260;
+        if (period == QStringLiteral("6mo")) return 140;
+        if (period == QStringLiteral("3mo")) return 90;
+        if (period == QStringLiteral("1mo")) return 35;
+        return 120;
+    };
+
+    for (const auto& h : history_reqs)
+        request_ohlc(h.topic, h.symbol, timeframe_for(h.interval), count_for(h.period, h.interval), false);
+}
+
 void MarketDataService::publish_quote_to_hub(const QuoteData& q) {
     datahub::DataHub::instance().publish(
         QStringLiteral("market:quote:") + q.symbol,
@@ -362,6 +508,52 @@ void MarketDataService::ensure_registered_with_hub() {
 void MarketDataService::fetch_quotes(const QStringList& symbols, QuoteCallback cb) {
     if (symbols.isEmpty()) {
         cb(true, {});
+        return;
+    }
+
+    const QString provider =
+        fincept::AppConfig::instance().get(QStringLiteral("data/market_data_provider"),
+                                           QStringLiteral("mt5")).toString().toLower();
+    if (provider != QStringLiteral("yfinance") && provider != QStringLiteral("python")) {
+        QUrlQuery query;
+        query.addQueryItem(QStringLiteral("symbols"), symbols.join(QLatin1Char(',')));
+        fincept::HttpClient::instance().get(
+            QStringLiteral("/market/quotes?") + query.toString(QUrl::FullyEncoded),
+            [this, symbols, cb = std::move(cb)](Result<QJsonDocument> r) {
+                if (r.is_err()) {
+                    cb(false, {});
+                    return;
+                }
+                const QJsonObject root = r.value().object();
+                if (!root.value(QStringLiteral("success")).toBool()) {
+                    cb(false, {});
+                    return;
+                }
+                QVector<QuoteData> quotes;
+                const QJsonArray rows = root.value(QStringLiteral("data")).toArray();
+                QSet<QString> wanted;
+                for (const auto& s : symbols)
+                    wanted.insert(s.toUpper());
+                for (const auto& v : rows) {
+                    const QJsonObject q = v.toObject();
+                    const QString sym = q.value(QStringLiteral("symbol")).toString();
+                    if (sym.isEmpty() || !wanted.contains(sym.toUpper()))
+                        continue;
+                    QuoteData qd{
+                        sym,
+                        q.value(QStringLiteral("name")).toString(sym),
+                        q.value(QStringLiteral("price")).toDouble(),
+                        q.value(QStringLiteral("change")).toDouble(),
+                        q.value(QStringLiteral("change_percent")).toDouble(),
+                        q.value(QStringLiteral("high")).toDouble(),
+                        q.value(QStringLiteral("low")).toDouble(),
+                        q.value(QStringLiteral("volume")).toDouble()};
+                    quotes.append(qd);
+                    publish_quote_to_hub(qd);
+                }
+                cb(!quotes.isEmpty(), quotes);
+            },
+            this);
         return;
     }
 
@@ -627,6 +819,63 @@ void MarketDataService::fetch_info(const QString& symbol, InfoCallback cb) {
 
 void MarketDataService::fetch_history(const QString& symbol, const QString& period, const QString& interval,
                                       HistoryCallback cb) {
+    const QString provider =
+        fincept::AppConfig::instance().get(QStringLiteral("data/market_data_provider"),
+                                           QStringLiteral("mt5")).toString().toLower();
+    if (provider != QStringLiteral("yfinance") && provider != QStringLiteral("python")) {
+        auto timeframe_for = [](const QString& interval) {
+            if (interval == QStringLiteral("1wk")) return QStringLiteral("W1");
+            if (interval == QStringLiteral("1mo")) return QStringLiteral("MN1");
+            if (interval == QStringLiteral("1d")) return QStringLiteral("D1");
+            if (interval == QStringLiteral("5m")) return QStringLiteral("M5");
+            if (interval == QStringLiteral("15m")) return QStringLiteral("M15");
+            return QStringLiteral("H1");
+        };
+        auto count_for = [](const QString& period, const QString& interval) {
+            if (period == QStringLiteral("5y")) return interval == QStringLiteral("1mo") ? 60 : 1300;
+            if (period == QStringLiteral("2y")) return interval == QStringLiteral("1wk") ? 110 : 520;
+            if (period == QStringLiteral("1y")) return interval == QStringLiteral("1wk") ? 60 : 260;
+            if (period == QStringLiteral("6mo")) return 140;
+            if (period == QStringLiteral("3mo")) return 90;
+            if (period == QStringLiteral("1mo")) return 35;
+            return 120;
+        };
+        QUrlQuery query;
+        query.addQueryItem(QStringLiteral("symbol"), symbol);
+        query.addQueryItem(QStringLiteral("timeframe"), timeframe_for(interval));
+        query.addQueryItem(QStringLiteral("count"), QString::number(count_for(period, interval)));
+        fincept::HttpClient::instance().get(
+            QStringLiteral("/market/ohlc?") + query.toString(QUrl::FullyEncoded),
+            [this, symbol, period, interval, cb = std::move(cb)](Result<QJsonDocument> r) {
+                if (r.is_err()) {
+                    cb(false, {});
+                    return;
+                }
+                const QJsonObject root = r.value().object();
+                if (!root.value(QStringLiteral("success")).toBool()) {
+                    cb(false, {});
+                    return;
+                }
+                QVector<HistoryPoint> history;
+                const QJsonArray rows = root.value(QStringLiteral("data")).toArray();
+                history.reserve(rows.size());
+                for (const auto& v : rows) {
+                    const QJsonObject o = v.toObject();
+                    history.append({
+                        static_cast<qint64>(o.value(QStringLiteral("time")).toDouble()),
+                        o.value(QStringLiteral("open")).toDouble(),
+                        o.value(QStringLiteral("high")).toDouble(),
+                        o.value(QStringLiteral("low")).toDouble(),
+                        o.value(QStringLiteral("close")).toDouble(),
+                        static_cast<qint64>(o.value(QStringLiteral("volume")).toDouble())});
+                }
+                publish_history_to_hub(symbol, period, interval, history);
+                cb(!history.isEmpty(), history);
+            },
+            this);
+        return;
+    }
+
     QStringList args;
     args << "historical_period" << symbol << period << interval;
 

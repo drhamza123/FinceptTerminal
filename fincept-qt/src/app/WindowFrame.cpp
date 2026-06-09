@@ -12,6 +12,7 @@
 #include "core/symbol/IGroupLinked.h"
 #include "core/symbol/SymbolGroup.h"
 #include "screens/common/IStatefulScreen.h"
+#include "core/config/AppConfig.h"
 #include "core/config/ProfileManager.h"
 #include "core/events/EventBus.h"
 #include "app/TerminalShell.h"
@@ -366,7 +367,10 @@ WindowFrame::WindowFrame(int window_id, QWidget* parent, const WindowId& adopted
         }
     });
     QTimer::singleShot(3000, this, [mcp_ws]() {
-        mcp_ws->open(QUrl("ws://localhost:8150/community/ws/mcp-reload"));
+        QUrl url(fincept::AppConfig::instance().api_base_url());
+        url.setScheme(url.scheme().toLower() == QStringLiteral("https") ? QStringLiteral("wss") : QStringLiteral("ws"));
+        url.setPath(QStringLiteral("/community/ws/mcp-reload"));
+        mcp_ws->open(url);
     });
 
     // ── SmartOrderEngine ZMQ startup ─────────────────────────────────────────

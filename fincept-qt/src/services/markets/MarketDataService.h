@@ -154,6 +154,14 @@ class MarketDataService : public QObject
   private:
     MarketDataService();
     void flush_batch();
+    struct HistoryRequest {
+        QString topic;
+        QString symbol;
+        QString period;
+        QString interval;
+    };
+    void refresh_mt5_live(const QStringList& quote_syms, const QStringList& spark_syms,
+                          const QVector<HistoryRequest>& history_reqs);
 
     /// Internal: publish the per-symbol result to the hub and clear
     /// in_flight for the matching topic. Called from inside `flush_batch`.

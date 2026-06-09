@@ -1,5 +1,6 @@
 #include "services/economics/MacroCalendarService.h"
 
+#include "core/config/AppConfig.h"
 #include "core/logging/Logger.h"
 #include "datahub/DataHub.h"
 #include "datahub/TopicPolicy.h"
@@ -18,7 +19,7 @@ namespace fincept::services {
 
 namespace {
 constexpr const char* kTopic = "econ:fincept:upcoming_events";
-constexpr const char* kUrl = "http://localhost:8150/macro/upcoming-events?limit=25";
+constexpr const char* kPath = "/macro/upcoming-events?limit=25";
 
 // Endpoint-specific API key. The shared HttpClient singleton attaches the
 // signed-in user's session key to same-host requests; this endpoint requires
@@ -85,7 +86,8 @@ void MacroCalendarService::refresh(const QStringList& topics) {
     if (!topics.contains(QString::fromLatin1(kTopic)))
         return;
 
-    QNetworkRequest req{QUrl(QString::fromLatin1(kUrl))};
+    QUrl url(fincept::AppConfig::instance().api_base_url() + QString::fromLatin1(kPath));
+    QNetworkRequest req{url};
     req.setHeader(QNetworkRequest::ContentTypeHeader, "application/json");
     req.setHeader(QNetworkRequest::UserAgentHeader, "AIStockGuardian/1.0");
     req.setRawHeader("X-API-Key", QByteArray(kApiKey));

@@ -121,7 +121,7 @@ void MT5FleetSignalsPanel::apply_theme() {
 
 void MT5FleetSignalsPanel::refresh_signals() {
     QString filter = filter_combo_->currentText();
-    QString endpoint = "http://localhost:8150/mt5/signals";
+    QString endpoint = "/mt5/signals";
     
     if (filter == "Top Performers") endpoint += "?filter=top";
     else if (filter == "Forex") endpoint += "?filter=forex";
@@ -180,7 +180,7 @@ void MT5FleetSignalsPanel::on_copy_clicked() {
     
     if (reply == QMessageBox::Yes) {
         HttpClient::instance().post(
-            QString("http://localhost:8150/mt5/signals/copy"),
+            QString("/mt5/signals/copy"),
             QJsonObject{{"provider_id", selected_signal_id_}},
             [this](Result<QJsonDocument> result) {
                 if (result.is_err()) {

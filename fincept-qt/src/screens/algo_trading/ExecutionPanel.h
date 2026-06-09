@@ -25,6 +25,8 @@ class ExecutionPanel : public QWidget {
     void place_order();
     void close_position(const QString& symbol);
     void cancel_order(const QString& orderId);
+    void run_script(const QString& deploymentId);
+    void stop_script(const QString& deploymentId);
     void refresh();
 
   private:
@@ -32,6 +34,7 @@ class ExecutionPanel : public QWidget {
     void fetch_account();
     void fetch_positions();
     void fetch_orders();
+    void fetch_scripts();
     void update_position_markers();
 
     MT5FleetChartPanel* chart_ = nullptr;
@@ -60,6 +63,9 @@ class ExecutionPanel : public QWidget {
 
     // Orders
     QTableWidget* ord_table_ = nullptr;
+
+    // Code deployments
+    QTableWidget* scripts_table_ = nullptr;
 };
 
 } // namespace fincept::screens

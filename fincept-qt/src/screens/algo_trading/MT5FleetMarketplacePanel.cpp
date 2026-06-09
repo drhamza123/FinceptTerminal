@@ -122,7 +122,7 @@ void MT5FleetMarketplacePanel::apply_theme() {
 }
 
 void MT5FleetMarketplacePanel::refresh_marketplace() {
-    QString endpoint = "http://localhost:8150/mt5/marketplace";
+    QString endpoint = "/mt5/marketplace";
     
     if (!search_text_.isEmpty()) {
         endpoint += QString("?search=%1").arg(search_text_);
@@ -183,7 +183,7 @@ void MT5FleetMarketplacePanel::on_install_clicked() {
     
     if (reply == QMessageBox::Yes) {
         HttpClient::instance().post(
-            QString("http://localhost:8150/mt5/marketplace/install"),
+            QString("/mt5/marketplace/install"),
             QJsonObject{{"ea_id", selected_ea_id_}},
             [this](Result<QJsonDocument> result) {
                 if (result.is_err()) {

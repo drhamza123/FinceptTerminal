@@ -5,6 +5,7 @@
 //   * "Language" preference (i18n)
 
 #include <QComboBox>
+#include <QLineEdit>
 #include <QWidget>
 
 namespace fincept::screens {
@@ -26,6 +27,7 @@ class GeneralSection : public QWidget {
     QComboBox* on_close_combo_ = nullptr;
     QComboBox* language_combo_ = nullptr;
     QComboBox* currency_combo_ = nullptr;
+    QLineEdit* api_base_url_edit_ = nullptr;
 };
 
 } // namespace fincept::screens

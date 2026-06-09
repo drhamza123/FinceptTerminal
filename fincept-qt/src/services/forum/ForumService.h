@@ -51,6 +51,7 @@ class ForumService : public QObject {
   private:
     ForumService();
     QString api_key() const;
+    QString base_url() const;
 
     void get(const QString& path, std::function<void(bool, QJsonObject)> cb);
     void post_req(const QString& path, const QJsonObject& body, std::function<void(bool, QJsonObject)> cb);
@@ -63,7 +64,6 @@ class ForumService : public QObject {
     static ForumProfile parse_profile(const QJsonObject& o);
 
     QNetworkAccessManager* nam_ = nullptr;
-    static constexpr const char* BASE = "http://localhost:8150";
 };
 
 } // namespace fincept::services

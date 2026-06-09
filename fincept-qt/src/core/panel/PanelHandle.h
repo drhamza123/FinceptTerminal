@@ -6,9 +6,7 @@
 #include <QString>
 #include <QVector>
 
-namespace ads {
-class CDockWidget;
-}
+#include <DockWidget.h>
 
 namespace fincept {
 

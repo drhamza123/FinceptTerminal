@@ -6,14 +6,19 @@
 # ============================================================
 set -e
 
-EA_NAME="GuardianBridge"
+EA_NAME="${1:-GuardianBridge}"
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 SRC_FILE="$SCRIPT_DIR/../backend/mql5/$EA_NAME/$EA_NAME.mq5"
 
-# Default Wine MT5 paths
-WINE_PREFIX="${WINEPREFIX:-$HOME/.wine}"
-METAEDITOR="$WINE_PREFIX/drive_c/Program Files/MetaTrader 5/metaeditor64.exe"
-EXPERTS_DIR="$WINE_PREFIX/drive_c/Program Files/MetaTrader 5/Experts"
+# Default Wine MT5 paths. MetaTrader's macOS package uses its own Wine prefix,
+# while manual Wine installs usually live under ~/.wine.
+WINE_PREFIX="${WINEPREFIX:-$HOME/Library/Application Support/net.metaquotes.wine.metatrader5}"
+if [ ! -d "$WINE_PREFIX" ]; then
+    WINE_PREFIX="$HOME/.wine"
+fi
+MT5_DIR="$WINE_PREFIX/drive_c/Program Files/MetaTrader 5"
+METAEDITOR="$MT5_DIR/metaeditor64.exe"
+EXPERTS_DIR="$MT5_DIR/MQL5/Experts"
 
 # Check source exists
 if [ ! -f "$SRC_FILE" ]; then
@@ -31,11 +36,13 @@ fi
 # Check metaeditor
 if [ ! -f "$METAEDITOR" ]; then
     echo "Searching for metaeditor64.exe..."
-    METAEDITOR=$(find "$WINE_PREFIX" -name "metaeditor64.exe" -o -name "metaeditor.exe" 2>/dev/null | head -1)
+    METAEDITOR=$(find "$HOME/Library/Application Support/net.metaquotes.wine.metatrader5" "$HOME/.wine" -name "metaeditor64.exe" -o -name "metaeditor.exe" 2>/dev/null | head -1)
     if [ -z "$METAEDITOR" ]; then
         echo "ERROR: metaeditor64.exe not found. Is MT5 installed in Wine?"
         exit 1
     fi
+    MT5_DIR="$(cd "$(dirname "$METAEDITOR")" && pwd)"
+    EXPERTS_DIR="$MT5_DIR/MQL5/Experts"
 fi
 echo "MetaEditor: $METAEDITOR"
 
@@ -46,8 +53,9 @@ cp "$SRC_FILE" "$TMP_DIR/$EA_NAME.mq5"
 # Compile
 echo "Compiling $EA_NAME..."
 # Convert path to Wine path
-SRC_WINE=$(echo "$TMP_DIR" | sed 's|/|\\|g; s|^\([A-Z]\):|Z:\1|; s|^|Z:|')
-wine "$METAEDITOR" "/compile:\"$TMP_DIR\\$EA_NAME.mq5\"" "/log:\"$TMP_DIR\\compile.log\"" 2>/dev/null
+SRC_WINE="Z:$(printf '%s/%s.mq5' "$TMP_DIR" "$EA_NAME" | sed 's|/|\\|g')"
+LOG_WINE="Z:$(printf '%s/compile.log' "$TMP_DIR" | sed 's|/|\\|g')"
+wine "$METAEDITOR" "/compile:$SRC_WINE" "/log:$LOG_WINE" 2>/dev/null || true
 cat "$TMP_DIR/compile.log" 2>/dev/null || true
 
 # Deploy

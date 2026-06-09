@@ -3,12 +3,14 @@
 #include <QJsonArray>
 #include <QJsonObject>
 #include <QJsonDocument>
+#include <QAbstractSocket>
 #include <QDebug>
 #include <QDateTime>
 #include "trading/BrokerInterface.h"
 #include <zmq.hpp>
 #include <thread>
 #include <chrono>
+#include <map>
 
 namespace fincept::trading {
 
@@ -85,16 +87,54 @@ void SmartOrderEngine::onDisconnected() {
 
 void SmartOrderEngine::onBinaryMessage(const QByteArray& message) {
     QJsonDocument doc = QJsonDocument::fromJson(message);
-    if (doc.isNull() || !doc.isObject()) return;
+    QJsonObject obj;
+    if (!doc.isNull() && doc.isObject()) {
+        obj = doc.object();
+    } else {
+        try {
+            msgpack::object_handle oh = msgpack::unpack(message.constData(), static_cast<std::size_t>(message.size()));
+            std::map<std::string, msgpack::object> fields;
+            oh.get().convert(fields);
+            auto get_string = [&](const char* key) {
+                auto it = fields.find(key);
+                if (it == fields.end()) return QString();
+                try { return QString::fromStdString(it->second.as<std::string>()); } catch (...) { return QString(); }
+            };
+            auto get_double = [&](const char* key) {
+                auto it = fields.find(key);
+                if (it == fields.end()) return 0.0;
+                try { return it->second.as<double>(); } catch (...) {
+                    try { return static_cast<double>(it->second.as<int64_t>()); } catch (...) { return 0.0; }
+                }
+            };
+            auto get_int = [&](const char* key) {
+                auto it = fields.find(key);
+                if (it == fields.end()) return 0;
+                try { return it->second.as<int>(); } catch (...) { return 0; }
+            };
+            obj["ticket"] = get_int("ticket");
+            obj["status"] = get_string("status");
+            obj["error"] = get_string("error");
+            obj["client_order_id"] = get_string("client_order_id");
+            obj["fill_price"] = get_double("fill_price");
+            obj["latency_ms"] = get_double("latency_ms");
+        } catch (...) {
+            emit orderRejected(QStringLiteral("Invalid order gateway response"));
+            return;
+        }
+    }
 
-    QJsonObject obj = doc.object();
     int ticket = obj["ticket"].toInt();
     QString status = obj["status"].toString();
 
     size_t h = head_.load(std::memory_order_acquire);
     if (h != tail_.load(std::memory_order_acquire)) {
         auto& slot = queue_[h];
-        if (status == "FILLED") {
+        if (status == "SUBMITTED") {
+            slot.order->latencyMs = obj["latency_ms"].toDouble();
+            emit orderSubmitted(obj["client_order_id"].toString(), slot.order->symbol, slot.order->side,
+                                slot.order->volume, slot.order->latencyMs);
+        } else if (status == "FILLED") {
             slot.order->ticket = ticket;
             slot.order->fillPrice = obj["fill_price"].toDouble();
             slot.order->latencyMs = obj["latency_ms"].toDouble();
@@ -153,7 +193,33 @@ void SmartOrderEngine::startZmq() {
 }
 
 void SmartOrderEngine::processQueue() {
-    if (!g_zmqPush) startZmq();
+    if (!socket_ || socket_->state() != QAbstractSocket::ConnectedState) {
+        emit orderRejected(QStringLiteral("Order gateway is not connected"));
+        head_.store(tail_.load(std::memory_order_acquire), std::memory_order_release);
+        return;
+    }
+
+    while (head_.load(std::memory_order_acquire) != tail_.load(std::memory_order_acquire)) {
+        size_t h = head_.load(std::memory_order_acquire);
+        auto& slot = queue_[h];
+        if (slot.order->processed.load(std::memory_order_acquire)) {
+            head_.store((h + 1) % RING_SIZE, std::memory_order_release);
+            continue;
+        }
+
+        msgpack::sbuffer sbuf;
+        UnifiedOrder uo;
+        uo.symbol = slot.order->symbol;
+        uo.quantity = slot.order->volume;
+        uo.price = 0;
+        uo.stop_loss = slot.order->sl;
+        uo.take_profit = slot.order->tp;
+        uo.side = slot.order->side == "BUY" ? OrderSide::Buy : OrderSide::Sell;
+        pack_order(uo, sbuf);
+
+        socket_->sendBinaryMessage(QByteArray(sbuf.data(), static_cast<int>(sbuf.size())));
+        break;
+    }
 }
 
 // Legacy broker routing (for UnifiedTrading compatibility)

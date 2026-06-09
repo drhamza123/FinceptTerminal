@@ -37,6 +37,7 @@ int OnInit() {
    gRiskPercent = InpRiskPercent;
    gStopLossPips = InpStopLossPips;
    gTakeProfitPips = InpTakeProfitPips;
+   trade.SetExpertMagicNumber(InpMagicNumber);
    Print("GuardianBridge starting, magic=", InpMagicNumber, " on ", _Symbol);
    if (!ConnectToServer()) Print("Initial connection failed — will retry");
    EventSetTimer(InpHeartbeatSec);
@@ -123,7 +124,7 @@ bool ConnectToServer() {
       SocketClose(gSocket);
       gSocket = INVALID_HANDLE;
    }
-   gSocket = SocketCreate(SOCKET_AF_INET, SOCKET_STREAM, SOCKET_IPPROTO_TCP);
+   gSocket = SocketCreate(SOCKET_DEFAULT);
    if (gSocket == INVALID_HANDLE) {
       Print("SocketCreate failed, error=", GetLastError());
       return false;
@@ -182,10 +183,57 @@ void ProcessCommand(string jsonMsg) {
    else if (StringFind(jsonMsg, "\"close_all\"") >= 0) {
       CloseAllPositions();
    }
+   else if (StringFind(jsonMsg, "\"market_order\"") >= 0) {
+      ExecuteMarketOrder(jsonMsg);
+   }
    else if (StringFind(jsonMsg, "\"shutdown\"") >= 0) {
       CloseAllPositions();
       ExpertRemove();
    }
+}
+
+//+------------------------------------------------------------------+
+void ExecuteMarketOrder(string jsonMsg) {
+   string side = ExtractParamString(jsonMsg, "side");
+   string symbol = ExtractParamString(jsonMsg, "symbol");
+   string clientOrderId = ExtractParamString(jsonMsg, "client_order_id");
+   double volume = ExtractParamDouble(jsonMsg, "volume");
+   double sl = ExtractParamDouble(jsonMsg, "sl");
+   double tp = ExtractParamDouble(jsonMsg, "tp");
+
+   if (symbol == "") symbol = _Symbol;
+   if (volume <= 0) volume = gLotSize;
+   if (sl < 0) sl = 0;
+   if (tp < 0) tp = 0;
+
+   bool ok = false;
+   ResetLastError();
+   if (StringCompare(side, "SELL", false) == 0) {
+      ok = trade.Sell(volume, symbol, 0.0, sl, tp, clientOrderId);
+   } else {
+      ok = trade.Buy(volume, symbol, 0.0, sl, tp, clientOrderId);
+   }
+
+   if (!ok) {
+      string err = StringFormat(
+         "{\"type\":\"error\",\"ea_name\":\"%s\",\"magic\":%d,"
+         "\"client_order_id\":\"%s\",\"message\":\"market order failed retcode=%d last_error=%d\"}\n",
+         MQLInfoString(MQL_PROGRAM_NAME), InpMagicNumber, clientOrderId,
+         trade.ResultRetcode(), GetLastError());
+      SendJSON(err);
+      Print("Market order failed: ", clientOrderId, " retcode=", trade.ResultRetcode(),
+            " last_error=", GetLastError());
+      return;
+   }
+
+   string ack = StringFormat(
+      "{\"type\":\"trade\",\"ea_name\":\"%s\",\"magic\":%d,"
+      "\"symbol\":\"%s\",\"action\":\"%s\",\"lots\":%.2f,"
+      "\"price\":%.5f,\"profit\":0,\"client_order_id\":\"%s\",\"ticket\":%I64u}\n",
+      MQLInfoString(MQL_PROGRAM_NAME), InpMagicNumber, symbol, side, volume,
+      trade.ResultPrice(), clientOrderId, trade.ResultOrder());
+   SendJSON(ack);
+   Print("Market order sent: ", clientOrderId, " ", side, " ", volume, " ", symbol);
 }
 
 //+------------------------------------------------------------------+
@@ -231,5 +279,26 @@ int ExtractParamInt(string json, string key) {
       pos++;
    }
    return StringToInteger(val);
+}
+
+//+------------------------------------------------------------------+
+string ExtractParamString(string json, string key) {
+   string search = "\"" + key + "\":";
+   int pos = StringFind(json, search);
+   if (pos < 0) return "";
+   pos += StringLen(search);
+   while (pos < StringLen(json)) {
+      ushort ch = StringGetCharacter(json, pos);
+      if (ch != ' ' && ch != '\t' && ch != '\"') break;
+      pos++;
+   }
+   string val = "";
+   while (pos < StringLen(json)) {
+      ushort ch = StringGetCharacter(json, pos);
+      if (ch == '\"' || ch == ',' || ch == '}' || ch == ']') break;
+      val += ShortToString(ch);
+      pos++;
+   }
+   return val;
 }
 //+------------------------------------------------------------------+

@@ -1,4 +1,5 @@
 #include "screens/community/CommunityMarketplaceScreen.h"
+#include "core/config/AppConfig.h"
 #include "ui/theme/Theme.h"
 #include <QJsonArray>
 #include <QJsonObject>
@@ -16,6 +17,7 @@ namespace fincept::screens {
 
 CommunityMarketplaceScreen::CommunityMarketplaceScreen(QWidget* parent) : QWidget(parent) {
     net_ = new QNetworkAccessManager(this);
+    base_url_ = fincept::AppConfig::instance().api_base_url() + QStringLiteral("/community");
     build_ui();
     fetch_tools();
     fetch_agents();

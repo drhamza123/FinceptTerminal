@@ -1,10 +1,12 @@
 #include "services/workflow/nodes/MarketDataNodes.h"
 
+#include "network/http/HttpClient.h"
 #include "python/PythonRunner.h"
 #include "screens/economics/panels/EconomicsPresets.h"
 #include "services/workflow/NodeRegistry.h"
 
 #include <QJsonDocument>
+#include <QUrl>
 
 namespace fincept::workflow {
 
@@ -44,6 +46,18 @@ void run_python_json(const QString& script, const QStringList& args,
     });
 }
 
+QString query_escape(const QString& value) {
+    return QString::fromUtf8(QUrl::toPercentEncoding(value));
+}
+
+QJsonObject json_doc_object(const QJsonDocument& doc) {
+    if (doc.isObject())
+        return doc.object();
+    if (doc.isArray())
+        return QJsonObject{{"data", doc.array()}};
+    return {};
+}
+
 } // anonymous namespace
 
 void register_market_data_nodes(NodeRegistry& registry) {
@@ -60,12 +74,30 @@ void register_market_data_nodes(NodeRegistry& registry) {
         .parameters =
             {
                 {"symbol", "Symbol", "string", "AAPL", {}, "Ticker symbol", true},
-                {"source", "Source", "select", "yahoo", {"yahoo", "alpha_vantage", "polygon", "databento"}, ""},
+                {"source", "Source", "select", "mt5", {"mt5", "yahoo", "alpha_vantage", "polygon", "databento"}, ""},
             },
         .execute =
             [](const QJsonObject& params, const QVector<QJsonValue>&,
                std::function<void(bool, QJsonValue, QString)> cb) {
                 QString symbol = params.value("symbol").toString("AAPL");
+                QString source = params.value("source").toString("mt5").toLower();
+                if (source == "mt5") {
+                    const QString url = "/mt5/market/quotes?symbols=" + query_escape(symbol);
+                    HttpClient::instance().get(url, [cb, symbol](Result<QJsonDocument> result) {
+                        if (result.is_err()) {
+                            cb(false, {}, QString::fromStdString(result.error()));
+                            return;
+                        }
+                        QJsonObject response = json_doc_object(result.value());
+                        QJsonArray quotes = response.value("quotes").toArray();
+                        if (quotes.isEmpty()) {
+                            cb(false, {}, response.value("error").toString(QString("No MT5 quote for %1").arg(symbol)));
+                            return;
+                        }
+                        cb(true, quotes.first().toObject(), {});
+                    });
+                    return;
+                }
                 run_python_json("yfinance_data.py", {"quote", symbol}, cb);
             },
     });
@@ -85,6 +117,7 @@ void register_market_data_nodes(NodeRegistry& registry) {
                 {"symbol", "Symbol", "string", "AAPL", {}, "Ticker symbol", true},
                 {"period", "Period", "select", "1y", {"1d", "5d", "1mo", "3mo", "6mo", "1y", "2y", "5y", "max"}, ""},
                 {"interval", "Interval", "select", "1d", {"1m", "5m", "15m", "1h", "1d", "1wk", "1mo"}, ""},
+                {"source", "Source", "select", "mt5", {"mt5", "yahoo"}, ""},
             },
         .execute =
             [](const QJsonObject& params, const QVector<QJsonValue>&,
@@ -92,6 +125,42 @@ void register_market_data_nodes(NodeRegistry& registry) {
                 QString symbol = params.value("symbol").toString("AAPL");
                 QString period = params.value("period").toString("1y");
                 QString interval = params.value("interval").toString("1d");
+                QString source = params.value("source").toString("mt5").toLower();
+                if (source == "mt5") {
+                    int count = 250;
+                    if (period == "1d") count = 96;
+                    else if (period == "5d") count = 240;
+                    else if (period == "1mo") count = 720;
+                    else if (period == "3mo") count = 1500;
+                    else if (period == "6mo") count = 3000;
+                    else if (period == "2y") count = 500;
+                    else if (period == "5y") count = 1250;
+                    else if (period == "max") count = 3000;
+
+                    QString tf = interval.toUpper();
+                    if (tf == "1D") tf = "D1";
+                    else if (tf == "1WK") tf = "W1";
+                    else if (tf == "1MO") tf = "MN1";
+                    const QString url = QString("/mt5/market/ohlc?symbol=%1&timeframe=%2&count=%3")
+                                            .arg(query_escape(symbol), query_escape(tf))
+                                            .arg(count);
+                    HttpClient::instance().get(url, [cb, symbol](Result<QJsonDocument> result) {
+                        if (result.is_err()) {
+                            cb(false, {}, QString::fromStdString(result.error()));
+                            return;
+                        }
+                        QJsonObject response = json_doc_object(result.value());
+                        QJsonArray candles = response.value("candles").toArray();
+                        if (candles.isEmpty())
+                            candles = response.value("data").toArray();
+                        if (candles.isEmpty()) {
+                            cb(false, {}, response.value("error").toString(QString("No MT5 history for %1").arg(symbol)));
+                            return;
+                        }
+                        cb(true, candles, {});
+                    });
+                    return;
+                }
                 run_python_json("yfinance_data.py", {"historical_period", symbol, period, interval}, cb);
             },
     });

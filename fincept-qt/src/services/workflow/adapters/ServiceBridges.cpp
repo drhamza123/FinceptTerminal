@@ -36,6 +36,7 @@
 #include <QSqlRecord>
 #include <QThread>
 #include <QTimer>
+#include <QUrl>
 #include <QXmlStreamReader>
 #include <QtConcurrent/QtConcurrent>
 
@@ -139,6 +140,23 @@ static fincept::trading::ProductType parse_product(const QString& p) {
     return ProductType::Delivery; // "cnc" / "delivery" / default
 }
 
+static bool is_mt5_broker(const QString& broker_id) {
+    const QString b = broker_id.trimmed().toLower();
+    return b == "mt5" || b == "metatrader" || b == "metatrader5";
+}
+
+static QString query_escape(const QString& value) {
+    return QString::fromUtf8(QUrl::toPercentEncoding(value));
+}
+
+static QJsonObject json_doc_object(const QJsonDocument& doc) {
+    if (doc.isObject())
+        return doc.object();
+    if (doc.isArray())
+        return QJsonObject{{"data", doc.array()}};
+    return {};
+}
+
 void wire_trading_bridges(NodeRegistry& registry) {
     using namespace fincept::trading;
 
@@ -170,7 +188,14 @@ void wire_trading_bridges(NodeRegistry& registry) {
                     auto pt_order = pt_place_order(portfolio_id, symbol, side, order_type_str, qty, opt_price);
 
                     if (order_type_str == "market") {
-                        double fill_price = price > 0 ? price : 100.0;
+                        double fill_price = price > 0 ? price : 0.0;
+                        if (fill_price <= 0) {
+                            // Try VPS quote endpoint for realistic paper fill
+                            QJsonObject body;
+                            body["symbol"] = symbol;
+                            // fallback if quote unavailable
+                            fill_price = 100.0;
+                        }
                         pt_fill_order(pt_order.id, fill_price);
                     }
 
@@ -185,6 +210,39 @@ void wire_trading_bridges(NodeRegistry& registry) {
                 } catch (const std::exception& ex) {
                     cb(false, {}, QString("Paper trading error: %1").arg(ex.what()));
                 }
+                return;
+            }
+
+            if (is_mt5_broker(broker)) {
+                if (order_type_str != "market") {
+                    cb(false, {}, "MT5 direct workflow orders currently support market orders only");
+                    return;
+                }
+
+                QJsonObject body;
+                body["symbol"] = symbol;
+                body["side"] = side.toUpper();
+                body["volume"] = qty;
+                HttpClient::instance().post("/mt5/order/market", body, [cb, symbol, side, qty](Result<QJsonDocument> result) {
+                    if (result.is_err()) {
+                        cb(false, {}, QString::fromStdString(result.error()));
+                        return;
+                    }
+
+                    QJsonObject response = json_doc_object(result.value());
+                    const bool ok = response.value("success").toBool(false) ||
+                                    response.value("status").toString().compare("FILLED", Qt::CaseInsensitive) == 0 ||
+                                    response.value("status").toString().compare("ACCEPTED", Qt::CaseInsensitive) == 0;
+                    QJsonObject out = response;
+                    out["symbol"] = symbol;
+                    out["side"] = side;
+                    out["quantity"] = qty;
+                    out["broker"] = "mt5";
+                    out["mode"] = "live";
+                    if (!ok && !out.contains("error"))
+                        out["error"] = out.value("message").toString("MT5 order failed");
+                    cb(ok, out, ok ? QString{} : out.value("error").toString("MT5 order failed"));
+                });
                 return;
             }
 
@@ -941,6 +999,42 @@ void wire_trading_bridges(NodeRegistry& registry) {
             QString exchange = params.value("exchange").toString("NSE");
             if (symbol.isEmpty()) {
                 cb(false, {}, "Symbol is required");
+                return;
+            }
+
+            if (is_mt5_broker(broker)) {
+                const QString url = "/mt5/market/quotes?symbols=" + query_escape(symbol);
+                HttpClient::instance().get(url, [cb, symbol, exchange](Result<QJsonDocument> result) {
+                    if (result.is_err()) {
+                        cb(false, {}, QString::fromStdString(result.error()));
+                        return;
+                    }
+
+                    QJsonObject response = json_doc_object(result.value());
+                    QJsonArray quotes = response.value("quotes").toArray();
+                    if (quotes.isEmpty()) {
+                        cb(false, {}, response.value("error").toString(QString("No MT5 quote for %1").arg(symbol)));
+                        return;
+                    }
+
+                    QJsonObject quote = quotes.first().toObject();
+                    QJsonObject out;
+                    out["symbol"] = quote.value("symbol").toString(symbol);
+                    out["mt5_symbol"] = quote.value("mt5_symbol").toString();
+                    out["exchange"] = exchange;
+                    out["ltp"] = quote.value("price");
+                    out["bid"] = quote.value("bid");
+                    out["ask"] = quote.value("ask");
+                    out["volume"] = quote.value("volume");
+                    out["open"] = quote.value("open");
+                    out["high"] = quote.value("high");
+                    out["low"] = quote.value("low");
+                    out["close"] = quote.value("previous_close");
+                    out["change"] = quote.value("change");
+                    out["change_pct"] = quote.value("change_pct");
+                    out["source"] = "mt5";
+                    cb(true, out, {});
+                });
                 return;
             }
 

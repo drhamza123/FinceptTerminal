@@ -88,10 +88,19 @@ class CryptoChart : public QWidget {
     // OHLC tooltip pinned to the chart's top-left corner
     QLabel* ohlc_tooltip_ = nullptr;
 
-    // Timeframe toggle buttons
-    QPushButton* tf_buttons_[6] = {};
-    int active_tf_ = 3; // default "1h"
-    static constexpr const char* TF_LABELS[] = {"1m", "5m", "15m", "1h", "4h", "1d"};
+    // Timeframe toggle buttons (31 timeframes)
+    QPushButton* tf_buttons_[31] = {};
+    int active_tf_ = 9; // default "1h"
+    static constexpr const char* TF_LABELS[] = {
+        "M1","M2","M3","M4","M5","M6","M10","M12","M15","M20",
+        "H1","H2","H3","H4","H6","H8","H12",
+        "D1","D2","D3","D5",
+        "W1","W2","W3",
+        "MN1","MN2","MN3","MN6",
+        "Y1","Y2","Y5"
+    };
+    // Map label -> backend timeframe string
+    static QString tf_label_to_backend(const QString& lbl);
 
     QVector<trading::Candle> candles_;
     static constexpr int MAX_VISIBLE = 120;
@@ -117,6 +126,28 @@ class CryptoChart : public QWidget {
     fincept::ui::IndicatorPicker* indicator_picker_ = nullptr;
 
     friend class HoverChartView;
+
+    // Chart type mode (0=candlestick, 1=renko, 2=kagi, 3=pnf)
+    int chart_mode_ = 0;
+    QPushButton* chart_mode_btn_ = nullptr;
+    void cycle_chart_mode();
+
+    // Volume Footprint + Renko + Position Sizing + Kagi + P&F
+    QPushButton* vfp_toggle_ = nullptr;
+    QPushButton* renko_toggle_ = nullptr;
+    QPushButton* kagi_toggle_ = nullptr;
+    QPushButton* pnf_toggle_ = nullptr;
+    class VolumeFootprint* vfp_widget_ = nullptr;
+    class RenkoChart* renko_widget_ = nullptr;
+    class KagiChart* kagi_widget_ = nullptr;
+    class PointFigureChart* pnf_widget_ = nullptr;
+    class PositionSizingTool* sizing_tool_ = nullptr;
+    QWidget* chart_overlay_stack_ = nullptr;
+    void toggle_vfp();
+    void toggle_renko();
+    void toggle_kagi();
+    void toggle_pnf();
+    void toggle_sizing();
 };
 
 } // namespace fincept::screens::crypto

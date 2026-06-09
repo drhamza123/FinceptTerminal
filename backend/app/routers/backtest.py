@@ -782,7 +782,7 @@ async def scan_strategies(body: dict, user=Depends(resolve_user)):
 @router.post("/backtest/scan/generate-ea")
 async def generate_ea_from_scan(body: dict, user=Depends(resolve_user)):
     """Generate MQL5 EA from a specific scan result."""
-    from app.services.strategy_scanner import ScanResult
+    from app.services.strategy_scanner import ScanResult, scanner
     sr = ScanResult(**body)
     sr.compute_score()
     code = scanner.generate_mql5(sr)

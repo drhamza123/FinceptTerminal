@@ -152,7 +152,7 @@ void MT5FleetCloudPanel::apply_theme() {
 }
 
 void MT5FleetCloudPanel::refresh_optimizations() {
-    HttpClient::instance().get("http://localhost:8150/mt5/optimizations", [this](Result<QJsonDocument> result) {
+    HttpClient::instance().get("/mt5/optimizations", [this](Result<QJsonDocument> result) {
         if (result.is_err()) return;
         auto doc = result.value();
         auto optimizations = doc.object()["optimizations"].toArray();
@@ -193,7 +193,7 @@ void MT5FleetCloudPanel::on_start_clicked() {
     config["generations"] = generations_spin_->value();
 
     HttpClient::instance().post(
-        "http://localhost:8150/mt5/optimizations/start",
+        "/mt5/optimizations/start",
         config,
         [this](Result<QJsonDocument> result) {
             if (result.is_err()) {
@@ -216,7 +216,7 @@ void MT5FleetCloudPanel::on_stop_clicked() {
     if (current_optimization_id_.isEmpty()) return;
     
     HttpClient::instance().post(
-        QString("http://localhost:8150/mt5/optimizations/%1/stop").arg(current_optimization_id_),
+        QString("/mt5/optimizations/%1/stop").arg(current_optimization_id_),
         QJsonObject(),
         [this](Result<QJsonDocument> result) {
             if (result.is_err()) {

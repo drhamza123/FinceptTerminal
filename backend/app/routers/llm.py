@@ -59,6 +59,7 @@ async def _proxy_to_llm(messages: list, model: str | None = None, max_tokens: in
 
 
 @router.post("/v1/chat/completions")
+@router.post("/chat/completions")
 async def openai_proxy(body: dict):
     """OpenAI-compatible proxy that forwards to Ollama."""
     return await _proxy_to_llm(
@@ -70,6 +71,7 @@ async def openai_proxy(body: dict):
 
 
 @router.post("/research/chat")
+@router.post("/research/llm/chat")
 async def chat_sync(body: dict):
     messages = body.get("messages", [])
     model = body.get("model")
@@ -81,7 +83,7 @@ async def chat_sync(body: dict):
 
 
 @router.post("/research/llm/async")
-async def chat_async(body: dict, x_api_key: str = Header(default=None)):
+async def chat_async(body: dict):
     prompt = body.get("prompt", "")
     max_tokens = body.get("max_tokens", 4096)
     task_id = str(uuid.uuid4())
@@ -127,6 +129,30 @@ async def chat_status(task_id: str):
     return {"success": True, "message": "OK", "data": task}
 
 
+@router.get("/research/llm/tags")
+@router.get("/llm/tags")
+async def ollama_tags():
+    """Proxy for Ollama's /api/tags — the app calls this to list models."""
+    try:
+        async with httpx.AsyncClient(timeout=5) as c:
+            r = await c.get(f"{settings.LLM_PROVIDER_BASE_URL.rstrip('/v1')}/api/tags")
+            if r.status_code == 200:
+                return r.json()
+    except Exception:
+        pass
+    return {"models": []}
+
+
 @router.get("/research/llm/models")
+@router.get("/llm/models")
 async def list_models():
-    return {"success": True, "message": "OK", "data": {"models": FINCEPT_MODELS}}
+    try:
+        async with httpx.AsyncClient(timeout=5) as c:
+            r = await c.get(f"{settings.LLM_PROVIDER_BASE_URL}/models")
+            if r.status_code == 200:
+                models = [m["name"] or m["id"] for m in r.json().get("data", r.json().get("models", []))]
+                if models:
+                    return {"success": True, "data": {"models": models}}
+    except Exception:
+        pass
+    return {"success": True, "data": {"models": FINCEPT_MODELS}}

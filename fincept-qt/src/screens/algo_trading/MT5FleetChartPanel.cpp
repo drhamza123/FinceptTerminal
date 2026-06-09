@@ -12,6 +12,7 @@
 #include "screens/algo_trading/PolygonOverlay.h"
 #include "screens/algo_trading/ExecutionPanel.h"
 #include "network/http/HttpClient.h"
+#include "core/config/AppConfig.h"
 #include "ui/theme/Theme.h"
 
 #include <QChart>
@@ -47,10 +48,32 @@
 #include <QShortcut>
 #include <QDialogButtonBox>
 #include <QFormLayout>
+#include <QColorDialog>
+#include <QUrl>
+#include <QUrlQuery>
 
 namespace fincept::screens {
 
 static const int MAX_POINTS = 200;
+
+static QString mt5_ws_url(const QString& path) {
+    QUrl url(fincept::AppConfig::instance().api_base_url());
+    url.setScheme(url.scheme().compare(QStringLiteral("https"), Qt::CaseInsensitive) == 0
+        ? QStringLiteral("wss")
+        : QStringLiteral("ws"));
+    url.setPath(path);
+    return url.toString();
+}
+
+static QString mt5_ohlc_path(const QString& symbol, const QString& timeframe, int count) {
+    QUrl url(QStringLiteral("/mt5/market/ohlc"));
+    QUrlQuery q;
+    q.addQueryItem(QStringLiteral("symbol"), symbol);
+    q.addQueryItem(QStringLiteral("timeframe"), timeframe);
+    q.addQueryItem(QStringLiteral("count"), QString::number(count));
+    url.setQuery(q);
+    return url.toString();
+}
 
 static bool is_oscillator(const QString& name) {
     return name == "RSI" || name == "MACD" || name == "Stochastic" || name == "ADX";
@@ -187,7 +210,7 @@ MT5FleetChartPanel::MT5FleetChartPanel(QWidget* parent) : QWidget(parent) {
     connect(alert_manager_, &ChartAlertManager::alertTriggered, this, &MT5FleetChartPanel::on_alert_triggered);
 
     // Low-latency execution gateway
-    order_engine_->connectToGateway("ws://localhost:8150/ws/orders");
+    order_engine_->connectToGateway(mt5_ws_url(QStringLiteral("/ws/orders")));
     connect(order_engine_, &trading::SmartOrderEngine::orderFilled, this,
         [this](int ticket, const QString& symbol, const QString& side,
                double volume, double fillPrice, double latencyMs) {
@@ -270,40 +293,155 @@ void MT5FleetChartPanel::build_ui() {
     hl->addWidget(chart_style_combo_); hl->addWidget(timeframe_combo_); hl->addWidget(indicator_combo_); hl->addWidget(refresh_btn_);
     root->addWidget(header);
 
-    // Drawing toolbar
-    auto* draw_bar = new QWidget(this); draw_bar->setObjectName("chartDrawBar"); draw_bar->setFixedHeight(30);
-    auto* dl = new QHBoxLayout(draw_bar); dl->setContentsMargins(8,0,8,0); dl->setSpacing(3);
-    QStringList tools = {"TrendLine","Ray","H-Line","V-Line","Channel","Pitchfork","Fib Retrace","Fib Ext","Fib Fan","Fib Arc","Gann Fan","Gann Square","Cycle Line","Elliott Wave","Brush","Measure","Text"};
-    QPushButton** btn_map[] = {&trendline_btn_, &trendline_btn_, &hline_btn_, &vline_btn_, &channel_btn_,
-                               &channel_btn_, &fib_btn_, &fib_ext_btn_, &fib_fan_btn_, &fib_fan_btn_,
-                               &gann_fan_btn_, &gann_fan_btn_, &channel_btn_, &elliott_btn_,
-                               &channel_btn_, &channel_btn_, &text_label_btn_};
-    for (int i = 0; i < tools.size(); ++i) {
-        *btn_map[i] = new QPushButton(tools[i], draw_bar);
-        (*btn_map[i])->setObjectName("chartToolBtn");
-        (*btn_map[i])->setFixedHeight(22);
-        (*btn_map[i])->setCursor(Qt::PointingHandCursor);
-        connect(*btn_map[i], &QPushButton::clicked, this, &MT5FleetChartPanel::on_drawing_tool_clicked);
-        dl->addWidget(*btn_map[i]);
-    }
-    dl->addStretch();
-    clear_draw_btn_ = new QPushButton("Clear", draw_bar); clear_draw_btn_->setObjectName("chartToolBtn");
-    clear_draw_btn_->setFixedHeight(22);
+    // TradingView-style drawing toolbar. It is inserted into the chart area
+    // below so the tools sit on the chart's left edge instead of above it.
+    drawing_toolbar_ = new QWidget(this);
+    drawing_toolbar_->setObjectName("chartDrawToolRail");
+    drawing_toolbar_->setFixedWidth(44);
+    auto* dl = new QVBoxLayout(drawing_toolbar_);
+    dl->setContentsMargins(5, 6, 5, 6);
+    dl->setSpacing(4);
+
+    auto addDrawTool = [&](const QString& tool, const QString& label, QPushButton** slot = nullptr) {
+        auto* btn = new QPushButton(label, drawing_toolbar_);
+        btn->setObjectName("chartRailToolBtn");
+        btn->setProperty("toolName", tool);
+        btn->setFixedSize(34, 26);
+        btn->setCheckable(true);
+        btn->setToolTip(tool);
+        btn->setCursor(Qt::PointingHandCursor);
+        connect(btn, &QPushButton::clicked, this, &MT5FleetChartPanel::on_drawing_tool_clicked);
+        dl->addWidget(btn);
+        drawing_tool_buttons_.append(btn);
+        if (slot) *slot = btn;
+        return btn;
+    };
+
+    cursor_btn_ = addDrawTool("None", "⌖");
+    cursor_btn_->setToolTip("Cursor / select");
+    cursor_btn_->setChecked(true);
+    trendline_btn_ = addDrawTool("TrendLine", "╱");
+    addDrawTool("Ray", "⟋");
+    hline_btn_ = addDrawTool("H-Line", "─");
+    vline_btn_ = addDrawTool("V-Line", "│");
+    channel_btn_ = addDrawTool("Channel", "▱");
+    addDrawTool("Pitchfork", "Ψ");
+    fib_btn_ = addDrawTool("Fib Retrace", "Fib");
+    fib_ext_btn_ = addDrawTool("Fib Ext", "Ext");
+    fib_fan_btn_ = addDrawTool("Fib Fan", "Fan");
+    addDrawTool("Fib Arc", "Arc");
+    gann_fan_btn_ = addDrawTool("Gann Fan", "G");
+    addDrawTool("Gann Square", "□");
+    addDrawTool("Cycle Line", "◷");
+    elliott_btn_ = addDrawTool("Elliott Wave", "EW");
+    addDrawTool("Brush", "✎");
+    addDrawTool("Measure", "⟷");
+    text_label_btn_ = addDrawTool("Text", "T");
+
+    dl->addSpacing(4);
+    clear_draw_btn_ = new QPushButton("×", drawing_toolbar_); clear_draw_btn_->setObjectName("chartRailToolBtn");
+    clear_draw_btn_->setFixedSize(34, 26);
+    clear_draw_btn_->setToolTip("Clear drawings");
     connect(clear_draw_btn_, &QPushButton::clicked, this, &MT5FleetChartPanel::clear_drawing_tools);
     dl->addWidget(clear_draw_btn_);
-    undo_draw_btn_ = new QPushButton("Undo", draw_bar); undo_draw_btn_->setObjectName("chartToolBtn");
-    undo_draw_btn_->setFixedHeight(22);
+    undo_draw_btn_ = new QPushButton("↶", drawing_toolbar_); undo_draw_btn_->setObjectName("chartRailToolBtn");
+    undo_draw_btn_->setFixedSize(34, 26);
+    undo_draw_btn_->setToolTip("Undo last drawing");
     connect(undo_draw_btn_, &QPushButton::clicked, this, &MT5FleetChartPanel::undo_last_tool);
     dl->addWidget(undo_draw_btn_);
-    save_draw_btn_ = new QPushButton("Save", draw_bar); save_draw_btn_->setObjectName("chartToolBtn");
-    save_draw_btn_->setFixedHeight(22);
+    save_draw_btn_ = new QPushButton("⬇", drawing_toolbar_); save_draw_btn_->setObjectName("chartRailToolBtn");
+    save_draw_btn_->setFixedSize(34, 26);
+    save_draw_btn_->setToolTip("Save drawings");
     connect(save_draw_btn_, &QPushButton::clicked, this, &MT5FleetChartPanel::save_drawings);
     dl->addWidget(save_draw_btn_);
-    load_draw_btn_ = new QPushButton("Load", draw_bar); load_draw_btn_->setObjectName("chartToolBtn");
-    load_draw_btn_->setFixedHeight(22);
+    load_draw_btn_ = new QPushButton("⬆", drawing_toolbar_); load_draw_btn_->setObjectName("chartRailToolBtn");
+    load_draw_btn_->setFixedSize(34, 26);
+    load_draw_btn_->setToolTip("Load drawings");
     connect(load_draw_btn_, &QPushButton::clicked, this, &MT5FleetChartPanel::load_drawings);
     dl->addWidget(load_draw_btn_);
-    root->addWidget(draw_bar);
+
+    magnet_btn_ = new QPushButton("Mag", drawing_toolbar_); magnet_btn_->setObjectName("chartRailToolBtn");
+    magnet_btn_->setFixedSize(34, 26);
+    magnet_btn_->setCheckable(true);
+    magnet_btn_->setToolTip("Magnet snap to candle OHLC");
+    connect(magnet_btn_, &QPushButton::toggled, this, [this](bool checked) {
+        magnet_enabled_ = checked;
+        tool_label_->setText(checked ? "Magnet on" : "Magnet off");
+        QTimer::singleShot(1600, this, [this](){ tool_label_->setText(""); });
+    });
+    dl->addWidget(magnet_btn_);
+
+    lock_draw_btn_ = new QPushButton("Lock", drawing_toolbar_); lock_draw_btn_->setObjectName("chartRailToolBtn");
+    lock_draw_btn_->setFixedSize(34, 26);
+    lock_draw_btn_->setCheckable(true);
+    lock_draw_btn_->setToolTip("Lock drawings");
+    connect(lock_draw_btn_, &QPushButton::toggled, this, [this](bool checked) {
+        drawings_locked_ = checked;
+        for (auto* draw : drawing_objects_) draw->setLocked(checked);
+        tool_label_->setText(checked ? "Drawings locked" : "Drawings unlocked");
+        QTimer::singleShot(1600, this, [this](){ tool_label_->setText(""); });
+    });
+    dl->addWidget(lock_draw_btn_);
+
+    hide_draw_btn_ = new QPushButton("Hide", drawing_toolbar_); hide_draw_btn_->setObjectName("chartRailToolBtn");
+    hide_draw_btn_->setFixedSize(34, 26);
+    hide_draw_btn_->setCheckable(true);
+    hide_draw_btn_->setToolTip("Hide drawings");
+    connect(hide_draw_btn_, &QPushButton::toggled, this, [this](bool checked) {
+        drawings_hidden_ = checked;
+        for (auto* draw : drawing_objects_) draw->setVisible(!checked);
+        tool_label_->setText(checked ? "Drawings hidden" : "Drawings shown");
+        QTimer::singleShot(1600, this, [this](){ tool_label_->setText(""); });
+    });
+    dl->addWidget(hide_draw_btn_);
+
+    object_tree_btn_ = new QPushButton("Obj", drawing_toolbar_); object_tree_btn_->setObjectName("chartRailToolBtn");
+    object_tree_btn_->setFixedSize(34, 26);
+    object_tree_btn_->setToolTip("Object tree");
+    connect(object_tree_btn_, &QPushButton::clicked, this, [this]() {
+        QStringList rows;
+        for (int i = 0; i < drawing_objects_.size(); ++i) {
+            auto* draw = drawing_objects_[i];
+            rows << QString("%1. %2  %3%4")
+                .arg(i + 1)
+                .arg(draw->toolName())
+                .arg(draw->isLocked() ? "[locked] " : "")
+                .arg(draw->isVisible() ? "" : "[hidden]");
+        }
+        QMessageBox::information(this, "Object Tree", rows.isEmpty() ? "No drawings" : rows.join("\n"));
+    });
+    dl->addWidget(object_tree_btn_);
+
+    drawing_style_btn_ = new QPushButton("Sty", drawing_toolbar_); drawing_style_btn_->setObjectName("chartRailToolBtn");
+    drawing_style_btn_->setFixedSize(34, 26);
+    drawing_style_btn_->setToolTip("Drawing style");
+    connect(drawing_style_btn_, &QPushButton::clicked, this, [this]() {
+        QVector<DrawingObject*> targets;
+        for (auto* item : chart_->scene()->selectedItems()) {
+            if (auto* draw = qgraphicsitem_cast<DrawingObject*>(item)) targets.append(draw);
+        }
+        if (targets.isEmpty()) targets = drawing_objects_;
+        if (targets.isEmpty()) {
+            tool_label_->setText("No drawings to style");
+            QTimer::singleShot(1600, this, [this](){ tool_label_->setText(""); });
+            return;
+        }
+
+        QColor initial = targets.first()->color();
+        QColor color = QColorDialog::getColor(initial, this, "Drawing Color");
+        if (!color.isValid()) return;
+        bool ok = false;
+        double width = QInputDialog::getDouble(this, "Line Width", "Width:", targets.first()->lineWidth(), 0.5, 12.0, 1, &ok);
+        if (!ok) return;
+        for (auto* draw : targets) {
+            draw->setColor(color);
+            draw->setLineWidth(width);
+        }
+        tool_label_->setText(QString("Styled %1 drawing(s)").arg(targets.size()));
+        QTimer::singleShot(1600, this, [this](){ tool_label_->setText(""); });
+    });
+    dl->addWidget(drawing_style_btn_);
+    dl->addStretch();
 
     // Features toolbar
     auto* feat_bar = new QWidget(this); feat_bar->setObjectName("chartDrawBar"); feat_bar->setFixedHeight(28);
@@ -387,11 +525,19 @@ void MT5FleetChartPanel::build_ui() {
     connect(indicator_params_btn_, &QPushButton::clicked, this, [this](){ edit_indicator_params(); });
     fl->addWidget(indicator_params_btn_);
 
+    replay_toggle_btn_ = new QPushButton("Replay", feat_bar); replay_toggle_btn_->setObjectName("chartToolBtn");
+    replay_toggle_btn_->setFixedHeight(20);
+    connect(replay_toggle_btn_, &QPushButton::clicked, this, [this]() {
+        replay_bar_->setVisible(!replay_bar_->isVisible());
+        if (replay_bar_->isVisible() && replay_engine_->totalBars() == 0) replay_engine_->loadData(chart_data_);
+    });
+    fl->addWidget(replay_toggle_btn_);
+
     auto* compiler_status_btn = new QPushButton("Compiler", feat_bar); compiler_status_btn->setObjectName("chartToolBtn");
     compiler_status_btn->setFixedHeight(20);
     connect(compiler_status_btn, &QPushButton::clicked, this, [this]() {
         tool_label_->setText("Checking compiler...");
-        HttpClient::instance().get("http://localhost:8150/mt5/compiler-status",
+        HttpClient::instance().get("/mt5/compiler-status",
             [this](Result<QJsonDocument> r) {
                 if (r.is_ok()) {
                     auto d = r.value().object()["data"].toObject();
@@ -486,6 +632,7 @@ void MT5FleetChartPanel::build_ui() {
     indicator_pane_ = new IndicatorPane(chart_container_);
     chart_col_->addWidget(indicator_pane_);
 
+    chart_wrap_->addWidget(drawing_toolbar_);
     chart_wrap_->addLayout(chart_col_, 1);
 
     volume_profile_ = new VolumeProfileLayer(chart_container_);
@@ -550,10 +697,14 @@ void MT5FleetChartPanel::apply_theme() {
         "QLabel#chartPrice{color:%4;font-size:14px;font-weight:600;}"
         "QLabel#chartTool{color:%5;font-size:11px;background:%6;padding:0 6px;border:1px solid %2;}"
         "QWidget#chartDrawBar{background:%1;border-bottom:1px solid %2;}"
+        "QWidget#chartDrawToolRail{background:%1;border-right:1px solid %2;}"
         "QComboBox#chartTimeframeCombo,QComboBox#chartIndicatorCombo{background:%6;color:%3;border:1px solid %2;padding:3px 6px;}"
         "QPushButton#chartToolBtn,QCheckBox#chartToolBtn{background:%6;color:%3;border:1px solid %2;padding:3px 6px;font-size:10px;max-height:22px;}"
         "QPushButton#chartToolBtn:hover,QCheckBox#chartToolBtn:hover{background:%7;}"
         "QPushButton#chartToolBtn:checked{background:%4;color:#FFF;}"
+        "QPushButton#chartRailToolBtn{background:%6;color:%3;border:1px solid transparent;padding:0;font-size:10px;font-weight:700;}"
+        "QPushButton#chartRailToolBtn:hover{background:%7;border-color:%2;}"
+        "QPushButton#chartRailToolBtn:checked{background:%4;color:#FFF;border-color:%4;}"
         "QChartView#chartView{background:%8;}"
     ).arg(ui::colors::BG_SURFACE(), ui::colors::BORDER_DIM(), ui::colors::TEXT_PRIMARY(),
           ui::colors::AMBER(), ui::colors::TEXT_SECONDARY(),
@@ -580,8 +731,7 @@ void MT5FleetChartPanel::set_chart_style(ChartStyle style) {
 }
 
 void MT5FleetChartPanel::load_chart_data() {
-    QString url = QString("http://localhost:8150/mt5/market/ohlc?symbol=%1&timeframe=%2&count=%3")
-        .arg(current_symbol_, current_timeframe_).arg(MAX_POINTS);
+    QString url = mt5_ohlc_path(current_symbol_, current_timeframe_, MAX_POINTS);
 
     HttpClient::instance().get(url,
         [this](Result<QJsonDocument> r) {
@@ -843,8 +993,7 @@ void MT5FleetChartPanel::render_alerts() {
 
 void MT5FleetChartPanel::load_compare_data(const QString& compareSymbol) {
     if (ohlc_data_.isEmpty()) return;
-    QString url = QString("http://localhost:8150/mt5/market/ohlc?symbol=%1&timeframe=%2&count=%3")
-        .arg(compareSymbol, current_timeframe_).arg(MAX_POINTS);
+    QString url = mt5_ohlc_path(compareSymbol, current_timeframe_, MAX_POINTS);
 
     HttpClient::instance().get(url,
         [this, compareSymbol](Result<QJsonDocument> r) {
@@ -955,8 +1104,7 @@ void MT5FleetChartPanel::add_indicator(const QString& name) {
 
     series->setPen(QPen(c, 1.2));
 
-    QString url = QString("http://localhost:8150/mt5/market/ohlc?symbol=%1&timeframe=%2&count=%3")
-        .arg(current_symbol_, current_timeframe_).arg(MAX_POINTS);
+    QString url = mt5_ohlc_path(current_symbol_, current_timeframe_, MAX_POINTS);
     HttpClient::instance().get(url, [this, series, name, key](Result<QJsonDocument> r) {
         if (r.is_err()) { delete series; return; }
         auto arr = r.value().object()["data"].toArray();
@@ -997,8 +1145,7 @@ void MT5FleetChartPanel::add_oscillator_indicator(const QString& name) {
     QString key = name.toLower();
     if (name == "Stochastic") key = "stoch_k";
 
-    QString url = QString("http://localhost:8150/mt5/market/ohlc?symbol=%1&timeframe=%2&count=%3")
-        .arg(current_symbol_, current_timeframe_).arg(MAX_POINTS);
+    QString url = mt5_ohlc_path(current_symbol_, current_timeframe_, MAX_POINTS);
     HttpClient::instance().get(url, [this, name, key](Result<QJsonDocument> r) {
         if (r.is_err()) return;
         auto arr = r.value().object()["data"].toArray();
@@ -1030,14 +1177,15 @@ void MT5FleetChartPanel::add_oscillator_indicator(const QString& name) {
 void MT5FleetChartPanel::on_drawing_tool_clicked() {
     auto* btn = qobject_cast<QPushButton*>(sender());
     if (!btn) return;
-    set_active_tool(btn->text());
+    const QString tool = btn->property("toolName").toString();
+    set_active_tool(tool.isEmpty() ? btn->text() : tool);
 }
 
 void MT5FleetChartPanel::set_active_tool(const QString& toolName) {
     active_tool_name_ = toolName;
     is_elliott_mode_ = (toolName == "Elliott Wave");
     is_text_label_mode_ = (toolName == "Text");
-    tool_label_->setText(toolName);
+    tool_label_->setText(toolName == "None" ? "" : toolName);
     chart_view_->setCursor(toolName == "None" ? Qt::ArrowCursor : Qt::CrossCursor);
     if (is_elliott_mode_) {
         elliott_points_.clear();
@@ -1046,6 +1194,37 @@ void MT5FleetChartPanel::set_active_tool(const QString& toolName) {
     if (is_text_label_mode_) {
         tool_label_->setText("Click chart to place text label");
     }
+    for (auto* btn : drawing_tool_buttons_) {
+        btn->setChecked(btn->property("toolName").toString() == toolName);
+    }
+    if (cursor_btn_ && (toolName == "None" || toolName.isEmpty())) cursor_btn_->setChecked(true);
+}
+
+QPointF MT5FleetChartPanel::apply_magnet_snap(const QPointF& point) const {
+    if (!magnet_enabled_ || ohlc_data_.isEmpty()) return point;
+
+    const OhlcvPoint* nearest = nullptr;
+    qreal bestDistance = 1e100;
+    for (const auto& candle : ohlc_data_) {
+        qreal distance = qAbs(point.x() - candle.time);
+        if (distance < bestDistance) {
+            bestDistance = distance;
+            nearest = &candle;
+        }
+    }
+    if (!nearest) return point;
+
+    qreal snappedY = nearest->close;
+    qreal bestYDistance = qAbs(point.y() - snappedY);
+    const qreal levels[] = {nearest->open, nearest->high, nearest->low, nearest->close};
+    for (qreal level : levels) {
+        qreal distance = qAbs(point.y() - level);
+        if (distance < bestYDistance) {
+            bestYDistance = distance;
+            snappedY = level;
+        }
+    }
+    return QPointF(nearest->time, snappedY);
 }
 
 void MT5FleetChartPanel::handle_object_placed(QPointF start, QPointF end) {
@@ -1069,6 +1248,8 @@ void MT5FleetChartPanel::handle_object_placed(QPointF start, QPointF end) {
     else if (active_tool_name_ == "Measure")     obj = new MeasureObject(start, end);
 
     if (obj) {
+        obj->setLocked(drawings_locked_);
+        obj->setVisible(!drawings_hidden_);
         chart_->scene()->addItem(obj);
         drawing_objects_.append(obj);
         connect(obj, &DrawingObject::objectSelected, this, [this](DrawingObject*) {});
@@ -1085,6 +1266,8 @@ void MT5FleetChartPanel::handle_point_placed(QPointF pt) {
         QString text = QInputDialog::getMultiLineText(this, "Chart Annotation", "Enter text:", "", &ok);
         if (ok && !text.isEmpty()) {
             auto* label = new TextLabelObject(pt, text);
+            label->setLocked(drawings_locked_);
+            label->setVisible(!drawings_hidden_);
             chart_->scene()->addItem(label);
             drawing_objects_.append(label);
             connect(label, &DrawingObject::objectSelected, this, [this](DrawingObject*) {});
@@ -1096,6 +1279,8 @@ void MT5FleetChartPanel::handle_drawing_finished() {
     if (is_elliott_mode_ && elliott_points_.size() >= 2) {
         auto* ew = new ElliottWaveObject();
         ew->setPoints(elliott_points_);
+        ew->setLocked(drawings_locked_);
+        ew->setVisible(!drawings_hidden_);
         chart_->scene()->addItem(ew);
         drawing_objects_.append(ew);
         elliott_points_.clear();
@@ -1179,6 +1364,8 @@ void MT5FleetChartPanel::load_drawings() {
 
         if (d) {
             d->fromJson(obj);
+            d->setLocked(drawings_locked_ || d->isLocked());
+            d->setVisible(!drawings_hidden_);
             chart_->scene()->addItem(d);
             drawing_objects_.append(d);
         }
@@ -1311,7 +1498,13 @@ void MT5FleetChartPanel::on_chart_template_load() {
             else if (tool == "Gann Fan") d = new GannFanObject();
             else if (tool == "Elliott Wave") d = new ElliottWaveObject();
             else if (tool == "Text") d = new TextLabelObject();
-            if (d) { d->fromJson(dobj); chart_->scene()->addItem(d); drawing_objects_.append(d); }
+            if (d) {
+                d->fromJson(dobj);
+                d->setLocked(drawings_locked_ || d->isLocked());
+                d->setVisible(!drawings_hidden_);
+                chart_->scene()->addItem(d);
+                drawing_objects_.append(d);
+            }
         }
     }
 
@@ -1526,7 +1719,7 @@ void MT5FleetChartPanel::update_last_price_marker() {
 
 void MT5FleetChartPanel::refresh_positions() {
     if (current_symbol_.isEmpty()) return;
-    HttpClient::instance().get("http://localhost:8150/mt5/positions",
+    HttpClient::instance().get("/mt5/positions",
         [this](Result<QJsonDocument> r) {
             if (!r.is_ok()) return;
             auto arr = r.value().object()["data"].toArray();
@@ -1623,6 +1816,7 @@ bool MT5FleetChartPanel::eventFilter(QObject* obj, QEvent* event) {
             auto* me = static_cast<QMouseEvent*>(event);
             if (me->button() == Qt::LeftButton) {
                 QPointF chartPt = chart_->mapToValue(me->position());
+                chartPt = apply_magnet_snap(chartPt);
                 if (active_tool_name_ == "Elliott Wave" || active_tool_name_ == "Text") {
                     handle_point_placed(chartPt);
                 } else {
@@ -1635,6 +1829,7 @@ bool MT5FleetChartPanel::eventFilter(QObject* obj, QEvent* event) {
             if (me->button() == Qt::LeftButton) {
                 is_placing_ = false;
                 QPointF endPt = chart_->mapToValue(me->position());
+                endPt = apply_magnet_snap(endPt);
                 handle_object_placed(last_start_, endPt);
                 handle_drawing_finished();
             }

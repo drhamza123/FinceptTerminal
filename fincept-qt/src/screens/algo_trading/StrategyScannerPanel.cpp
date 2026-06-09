@@ -45,7 +45,7 @@ void StrategyScannerPanel::on_scan() {
     progress_->setVisible(true);
     status_lbl_->setText("Scanning all symbols × strategies...");
 
-    HttpClient::instance().post("http://localhost:8150/backtest/scan", QJsonObject(),
+    HttpClient::instance().post("/backtest/scan", QJsonObject(),
         [this](Result<QJsonDocument> r) {
             scan_btn_->setEnabled(true);
             progress_->setVisible(false);

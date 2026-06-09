@@ -1,5 +1,6 @@
 #include "screens/dashboard/DashboardStatusBar.h"
 
+#include "core/config/AppConfig.h"
 #include "ui/theme/Theme.h"
 #include "ui/theme/ThemeManager.h"
 #include "ui/widgets/NotifBell.h"
@@ -262,7 +263,7 @@ void DashboardStatusBar::update_memory() {
 }
 
 void DashboardStatusBar::ping_api() {
-    QNetworkRequest req(QUrl("http://localhost:8150/health"));
+    QNetworkRequest req(QUrl(fincept::AppConfig::instance().api_base_url() + QStringLiteral("/health")));
     req.setTransferTimeout(5000);
     ping_elapsed_.restart();
     QNetworkReply* reply = nam_->get(req);

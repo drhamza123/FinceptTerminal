@@ -188,7 +188,7 @@ QWidget* CodeEditorScreen::build_toolbar() {
     add_sep();
 
     // ── Deploy to MT5 button ──
-    mt5_deploy_btn_ = new QPushButton("DEPLOY MT5", bar);
+    mt5_deploy_btn_ = new QPushButton("DEPLOY SCRIPT", bar);
     mt5_deploy_btn_->setCursor(Qt::PointingHandCursor);
     mt5_deploy_btn_->setStyleSheet(QString("QPushButton { background:#1a3a1a; color:#00D66F; border:1px solid #00D66F;"
                                            " font-family:%1; font-size:%2px; font-weight:700; padding:4px 14px;"
@@ -467,6 +467,118 @@ void CodeEditorScreen::on_run_cell(const QString& cell_id) {
 
     QPointer<CodeEditorScreen> self = this;
     QString cid = cell_id;
+
+    const QString probe = code.toLower();
+    const bool is_mql5 = code.trimmed().startsWith("//+") || probe.contains("#property") ||
+                         probe.contains("ontick(") || probe.contains("oninit(") ||
+                         probe.contains("ontradetransaction(") || probe.contains("ctrade");
+    if (is_mql5) {
+        QJsonObject executionPayload;
+        executionPayload["name"] = "AIGeneratedEA";
+        executionPayload["language"] = "mql5";
+        executionPayload["source"] = code;
+        executionPayload["target"] = "execution+mt5";
+
+        HttpClient::instance().post("/execution/scripts/deploy", executionPayload,
+            [self, cid, exec_num, code](Result<QJsonDocument> deployResult) {
+                if (!self)
+                    return;
+
+                auto finish = [self, cid, exec_num](const QString& text, bool ok) {
+                    int idx = self->find_cell_index(cid);
+                    if (idx < 0)
+                        return;
+
+                    CellOutput out;
+                    out.type = ok ? "stream" : "error";
+                    out.name = ok ? "stdout" : "stderr";
+                    out.error_name = ok ? QString() : "MT5DeployError";
+                    out.error_value = ok ? QString() : text;
+                    out.text = text;
+                    if (!ok)
+                        out.traceback = text.split('\n');
+
+                    QVector<CellOutput> outputs{out};
+                    self->cells_[idx].outputs = outputs;
+                    self->cells_[idx].execution_count = exec_num;
+                    self->cells_[idx].running = false;
+
+                    auto* widget = self->find_cell_widget(cid);
+                    if (widget) {
+                        widget->set_outputs(outputs, exec_num);
+                        widget->set_running(false);
+                    }
+
+                    self->kernel_label_->setText("KERNEL: IDLE");
+                    self->kernel_label_->setStyleSheet(QString("color:%1; font-family:%2; font-size:10px; font-weight:600;"
+                                                               " letter-spacing:0.5px; padding:0 8px;")
+                                                           .arg(colors::POSITIVE(), fonts::DATA_FAMILY));
+                    self->update_status();
+                    self->update_navigator();
+                };
+
+                if (deployResult.is_err() || !deployResult.value().object()["success"].toBool()) {
+                    finish("Failed to register MQL5 script in Execution tab.", false);
+                    return;
+                }
+
+                const QString deploymentId = deployResult.value().object()["data"].toObject()["id"].toString();
+                QJsonObject compilePayload;
+                compilePayload["mql5_code"] = code;
+                compilePayload["output_name"] = "AIGeneratedEA";
+
+                HttpClient::instance().post("/mt5/ea/compile", compilePayload,
+                    [self, cid, exec_num, deploymentId, finish](Result<QJsonDocument> compileResult) {
+                        if (!self)
+                            return;
+                        if (compileResult.is_err()) {
+                            finish("MT5 compile request failed.", false);
+                            return;
+                        }
+                        QJsonObject compileObj = compileResult.value().object();
+                        if (!compileObj["success"].toBool()) {
+                            QString err = compileObj["error"].toString("MT5 compilation failed.");
+                            finish(err, false);
+                            return;
+                        }
+
+                        const QString ex5Path = compileObj["data"].toObject()["ex5_path"].toString();
+                        if (ex5Path.isEmpty()) {
+                            finish("MQL5 compiled, but backend did not return an EX5 path.", false);
+                            return;
+                        }
+
+                        QJsonObject deployPayload;
+                        deployPayload["ex5_path"] = ex5Path;
+                        deployPayload["target_name"] = "AIGeneratedEA";
+                        HttpClient::instance().post("/mt5/ea/deploy", deployPayload,
+                            [self, deploymentId, finish](Result<QJsonDocument> mt5DeployResult) {
+                                if (!self)
+                                    return;
+                                if (mt5DeployResult.is_err()) {
+                                    finish("MT5 deploy request failed.", false);
+                                    return;
+                                }
+
+                                QJsonObject dep = mt5DeployResult.value().object();
+                                if (!dep["success"].toBool()) {
+                                    finish(dep["error"].toString("MT5 deployment failed."), false);
+                                    return;
+                                }
+
+                                const QString mt5Path = dep["data"].toObject()["deployed_path"].toString();
+                                QJsonObject markPayload;
+                                markPayload["mt5_deployed"] = true;
+                                markPayload["mt5_path"] = mt5Path;
+                                HttpClient::instance().post(QString("/execution/scripts/%1/mt5").arg(deploymentId),
+                                    markPayload, [](Result<QJsonDocument>) {}, self);
+
+                                finish(QString("MQL5 deployed to Execution tab and MetaTrader target.\nEX5: %1").arg(mt5Path), true);
+                            }, self);
+                    }, self);
+            }, this);
+        return;
+    }
 
     python::PythonRunner::instance().run_code(code, [self, cid, exec_num](python::PythonResult result) {
         if (!self)
@@ -763,81 +875,121 @@ void CodeEditorScreen::restore_state(const QVariantMap& state) {
 // ── MT5 Deploy ────────────────────────────────────────────────────────────────
 
 void CodeEditorScreen::on_deploy_to_mt5() {
-    QString mql5Code;
+    QString code;
     for (const auto& cell : cells_) {
         if (cell.cell_type == "code" && !cell.source.trimmed().isEmpty()) {
-            mql5Code += cell.source.trimmed() + "\n\n";
+            code += cell.source.trimmed() + "\n\n";
         }
     }
-    if (mql5Code.trimmed().isEmpty()) {
+    if (code.trimmed().isEmpty()) {
         mt5_status_label_->setText("No code to deploy");
         mt5_status_label_->setStyleSheet(QString("color:#FF4444; font-family:%1; font-size:9px; font-weight:600;")
                                              .arg(fincept::ui::fonts::DATA_FAMILY));
         return;
     }
-    mt5_status_label_->setText("Compiling...");
+
+    const QString probe = code.toLower();
+    const bool is_mql5 = probe.contains("#property") || probe.contains("ontick(") ||
+                         probe.contains("oninit(") || probe.contains("ctrade");
+    const QString language = is_mql5 ? "mql5" : "python";
+    const QString outputName = is_mql5 ? "AIGeneratedEA" : "PythonStrategy";
+
+    mt5_status_label_->setText(is_mql5 ? "Deploying Execution + MT5..." : "Deploying Execution...");
     mt5_status_label_->setStyleSheet(QString("color:#FFC400; font-family:%1; font-size:9px; font-weight:600;")
                                          .arg(fincept::ui::fonts::DATA_FAMILY));
     mt5_deploy_btn_->setEnabled(false);
 
-    QJsonObject compilePayload;
-    compilePayload["mql5_code"] = mql5Code;
-    compilePayload["output_name"] = "AIGeneratedEA";
+    QJsonObject executionPayload;
+    executionPayload["name"] = outputName;
+    executionPayload["language"] = language;
+    executionPayload["source"] = code;
+    executionPayload["target"] = is_mql5 ? "execution+mt5" : "execution";
 
-    HttpClient::instance().post("http://localhost:8150/mt5/ea/compile", compilePayload,
-        [this](Result<QJsonDocument> result) {
-            if (result.is_err()) {
-                mt5_status_label_->setText("Compile failed");
+    HttpClient::instance().post("/execution/scripts/deploy", executionPayload,
+        [this, code, is_mql5, outputName](Result<QJsonDocument> deployResult) {
+            if (deployResult.is_err() || !deployResult.value().object()["success"].toBool()) {
+                mt5_status_label_->setText("Execution deploy failed");
                 mt5_status_label_->setStyleSheet(QString("color:#FF4444; font-family:%1; font-size:9px; font-weight:600;")
                                                      .arg(fincept::ui::fonts::DATA_FAMILY));
                 mt5_deploy_btn_->setEnabled(true);
                 return;
             }
-            QJsonObject res = result.value().object();
-            if (!res["success"].toBool()) {
-                QString err = res["error"].toString();
-                if (err.isEmpty()) {
-                    QJsonObject d = res["data"].toObject();
-                    QJsonArray e = d["errors"].toArray();
-                    if (!e.isEmpty()) err = e[0].toString();
-                }
-                mt5_status_label_->setText(err.isEmpty() ? "Compile failed" : err);
-                mt5_status_label_->setStyleSheet(QString("color:#FF4444; font-family:%1; font-size:9px; font-weight:600;")
-                                                     .arg(fincept::ui::fonts::DATA_FAMILY));
-                mt5_deploy_btn_->setEnabled(true);
-                return;
-            }
-            QString ex5Path = res["data"].toObject()["ex5_path"].toString();
-            if (!ex5Path.isEmpty()) {
-                QJsonObject deployPayload;
-                deployPayload["ex5_path"] = ex5Path;
-                deployPayload["target_name"] = "AIGeneratedEA";
-                HttpClient::instance().post("http://localhost:8150/mt5/ea/deploy", deployPayload,
-                    [this](Result<QJsonDocument> r) {
-                        mt5_deploy_btn_->setEnabled(true);
-                        if (r.is_err()) {
-                            mt5_status_label_->setText("Deploy failed");
-                            mt5_status_label_->setStyleSheet(QString("color:#FF4444; font-family:%1; font-size:9px; font-weight:600;")
-                                                                 .arg(fincept::ui::fonts::DATA_FAMILY));
-                            return;
-                        }
-                        QJsonObject dep = r.value().object();
-                        if (dep["success"].toBool()) {
-                            mt5_status_label_->setText("Deployed ✓");
-                            mt5_status_label_->setStyleSheet(QString("color:#00D66F; font-family:%1; font-size:9px; font-weight:600;")
-                                                                 .arg(fincept::ui::fonts::DATA_FAMILY));
-                        } else {
-                            mt5_status_label_->setText("Deploy failed");
-                            mt5_status_label_->setStyleSheet(QString("color:#FF4444; font-family:%1; font-size:9px; font-weight:600;")
-                                                                 .arg(fincept::ui::fonts::DATA_FAMILY));
-                        }
-                    }, this);
-            } else {
-                mt5_status_label_->setText("Compiled ✓");
+
+            const QString deploymentId = deployResult.value().object()["data"].toObject()["id"].toString();
+            if (!is_mql5) {
+                mt5_status_label_->setText("Deployed to Execution");
                 mt5_status_label_->setStyleSheet(QString("color:#00D66F; font-family:%1; font-size:9px; font-weight:600;")
                                                      .arg(fincept::ui::fonts::DATA_FAMILY));
                 mt5_deploy_btn_->setEnabled(true);
+                return;
             }
+
+            QJsonObject compilePayload;
+            compilePayload["mql5_code"] = code;
+            compilePayload["output_name"] = outputName;
+
+            HttpClient::instance().post("/mt5/ea/compile", compilePayload,
+                [this, deploymentId, outputName](Result<QJsonDocument> result) {
+                    if (result.is_err()) {
+                        mt5_status_label_->setText("Compile failed");
+                        mt5_status_label_->setStyleSheet(QString("color:#FF4444; font-family:%1; font-size:9px; font-weight:600;")
+                                                             .arg(fincept::ui::fonts::DATA_FAMILY));
+                        mt5_deploy_btn_->setEnabled(true);
+                        return;
+                    }
+                    QJsonObject res = result.value().object();
+                    if (!res["success"].toBool()) {
+                        QString err = res["error"].toString();
+                        if (err.isEmpty()) {
+                            QJsonArray e = res["data"].toObject()["errors"].toArray();
+                            if (!e.isEmpty()) err = e[0].toString();
+                        }
+                        mt5_status_label_->setText(err.isEmpty() ? "Compile failed" : err);
+                        mt5_status_label_->setStyleSheet(QString("color:#FF4444; font-family:%1; font-size:9px; font-weight:600;")
+                                                             .arg(fincept::ui::fonts::DATA_FAMILY));
+                        mt5_deploy_btn_->setEnabled(true);
+                        return;
+                    }
+
+                    QString ex5Path = res["data"].toObject()["ex5_path"].toString();
+                    if (ex5Path.isEmpty()) {
+                        mt5_status_label_->setText("Compiled, no EX5 path");
+                        mt5_status_label_->setStyleSheet(QString("color:#FFC400; font-family:%1; font-size:9px; font-weight:600;")
+                                                             .arg(fincept::ui::fonts::DATA_FAMILY));
+                        mt5_deploy_btn_->setEnabled(true);
+                        return;
+                    }
+
+                    QJsonObject deployPayload;
+                    deployPayload["ex5_path"] = ex5Path;
+                    deployPayload["target_name"] = outputName;
+                    HttpClient::instance().post("/mt5/ea/deploy", deployPayload,
+                        [this, deploymentId](Result<QJsonDocument> r) {
+                            mt5_deploy_btn_->setEnabled(true);
+                            if (r.is_err()) {
+                                mt5_status_label_->setText("MT5 deploy failed");
+                                mt5_status_label_->setStyleSheet(QString("color:#FF4444; font-family:%1; font-size:9px; font-weight:600;")
+                                                                     .arg(fincept::ui::fonts::DATA_FAMILY));
+                                return;
+                            }
+                            QJsonObject dep = r.value().object();
+                            if (dep["success"].toBool()) {
+                                QJsonObject markPayload;
+                                markPayload["mt5_deployed"] = true;
+                                markPayload["mt5_path"] = dep["data"].toObject()["deployed_path"].toString();
+                                HttpClient::instance().post(QString("/execution/scripts/%1/mt5").arg(deploymentId),
+                                    markPayload, [](Result<QJsonDocument>) {}, this);
+
+                                mt5_status_label_->setText("Execution + MT5 deployed");
+                                mt5_status_label_->setStyleSheet(QString("color:#00D66F; font-family:%1; font-size:9px; font-weight:600;")
+                                                                     .arg(fincept::ui::fonts::DATA_FAMILY));
+                            } else {
+                                mt5_status_label_->setText("MT5 deploy failed");
+                                mt5_status_label_->setStyleSheet(QString("color:#FF4444; font-family:%1; font-size:9px; font-weight:600;")
+                                                                     .arg(fincept::ui::fonts::DATA_FAMILY));
+                            }
+                        }, this);
+                }, this);
         }, this);
 }
 

@@ -6,12 +6,14 @@ import re
 import shutil
 import tempfile
 
+from app.config import settings
+
 logger = logging.getLogger("guardian.mt5")
 
 _compile_semaphore = asyncio.Semaphore(1)
-METAEDITOR_PATH = os.environ.get("MT5_METAEDITOR_PATH", "")
-EXPERTS_DIR = os.environ.get("MT5_EXPERTS_DIR", "")
-DEV_MODE = os.environ.get("MT5_DEV_MODE", "0") == "1"
+METAEDITOR_PATH = os.environ.get("MT5_METAEDITOR_PATH", "") or settings.MT5_METAEDITOR_PATH
+EXPERTS_DIR = os.environ.get("MT5_EXPERTS_DIR", "") or settings.MT5_EXPERTS_DIR
+DEV_MODE = (os.environ.get("MT5_DEV_MODE", "") or str(settings.MT5_DEV_MODE)).lower() in {"1", "true", "yes", "on"}
 
 
 def _find_metaeditor() -> str:

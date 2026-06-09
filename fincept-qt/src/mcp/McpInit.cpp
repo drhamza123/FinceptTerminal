@@ -7,6 +7,7 @@
 #include "mcp/McpService.h"
 #include "mcp/tools/AgentsTools.h"
 #include "mcp/tools/AiChatTools.h"
+#include "mcp/tools/AlgoEngineTools.h"
 #include "mcp/tools/AltInvestmentsTools.h"
 #include "mcp/tools/CryptoTradingTools.h"
 #include "mcp/tools/DashboardTools.h"
@@ -119,6 +120,9 @@ void initialize_all_tools() {
 
     // live broker trading (order placement/cancel, account state, market data)
     provider.register_tools(tools::get_live_trading_tools());
+
+    // algo engine (AI agent → strategy control, backtesting, regime, ML signals)
+    provider.register_tools(tools::get_algo_engine_tools());
 
     // sec edgar (CIK resolution, XBRL financials, filing search)
     provider.register_tools(tools::get_edgar_tools());

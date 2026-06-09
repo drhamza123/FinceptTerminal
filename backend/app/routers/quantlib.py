@@ -1549,7 +1549,8 @@ async def numerical_integration(body: dict):
     with np.errstate(all="ignore"):
         xs = np.linspace(a, b, n)
         ys = np.array([f(float(x)) for x in xs])
-        error_est = abs(np.trapz(ys, xs) - result) if n > 2 else 0
+        trapz_func = getattr(np, 'trapezoid', getattr(np, 'trapz', None))
+        error_est = abs(trapz_func(ys, xs) - result) if n > 2 and trapz_func else 0
 
     return {
         "success": True,

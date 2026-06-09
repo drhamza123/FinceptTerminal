@@ -1,11 +1,23 @@
 #include "screens/algo_trading/PolygonOverlay.h"
 #include "screens/algo_trading/MT5FleetChartPanel.h"
+#include "core/config/AppConfig.h"
 #include "ui/theme/Theme.h"
 #include <QJsonDocument>
 #include <QJsonObject>
 #include <QJsonArray>
 
 namespace fincept::screens {
+
+namespace {
+QString polygon_ws_url() {
+    QUrl url(fincept::AppConfig::instance().api_base_url());
+    const QString scheme = url.scheme().toLower() == QStringLiteral("https") ? QStringLiteral("wss")
+                                                                             : QStringLiteral("ws");
+    url.setScheme(scheme);
+    url.setPath(QStringLiteral("/ws/polygon"));
+    return url.toString();
+}
+} // namespace
 
 PolygonOverlay::PolygonOverlay(MT5FleetChartPanel* chart, QWidget* parent)
     : QWidget(parent), chart_(chart) {
@@ -67,7 +79,7 @@ void PolygonOverlay::build_ui() {
 void PolygonOverlay::on_connect() {
     if (connected_) { ws_->close(); return; }
     status_lbl_->setText("Connecting...");
-    ws_->open(QUrl("ws://localhost:8150/ws/polygon"));
+    ws_->open(QUrl(polygon_ws_url()));
 }
 
 void PolygonOverlay::on_ws_message(const QString& msg) {

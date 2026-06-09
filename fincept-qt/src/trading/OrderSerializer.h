@@ -20,13 +20,15 @@ inline std::string type_to_string(OrderType type) {
 
 inline void pack_order(const UnifiedOrder& order, msgpack::sbuffer& sbuf) {
     msgpack::packer<msgpack::sbuffer> pk(&sbuf);
-    pk.pack_map(11);
+    pk.pack_map(12);
     pk.pack("symbol");      pk.pack(order.symbol.toStdString());
     pk.pack("side");        pk.pack(side_to_string(order.side));
     pk.pack("type");        pk.pack(type_to_string(order.order_type));
     pk.pack("tif");         pk.pack("GTC");
     pk.pack("volume");      pk.pack(order.quantity);
     pk.pack("price");       pk.pack(order.price);
+    pk.pack("sl");          pk.pack(order.stop_loss);
+    pk.pack("tp");          pk.pack(order.take_profit);
     pk.pack("stop_loss");   pk.pack(order.stop_loss);
     pk.pack("take_profit"); pk.pack(order.take_profit);
     pk.pack("comment");     pk.pack("FinceptAI");

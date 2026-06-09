@@ -14,3 +14,4 @@ feedparser>=6.0.0
 yfinance>=0.2.0
 numpy>=1.26.0
 pandas>=2.1.0
+MetaTrader5>=5.0.45; platform_system == "Windows"

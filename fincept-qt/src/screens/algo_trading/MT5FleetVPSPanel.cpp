@@ -110,7 +110,7 @@ void MT5FleetVPSPanel::apply_theme() {
 }
 
 void MT5FleetVPSPanel::refresh_plans() {
-    HttpClient::instance().get("http://localhost:8150/vps/plans", [this](Result<QJsonDocument> r) {
+    HttpClient::instance().get("/vps/plans", [this](Result<QJsonDocument> r) {
         if (r.is_err()) return;
         auto arr = r.value().object()["data"].toArray();
         plan_combo_->clear();
@@ -129,7 +129,7 @@ void MT5FleetVPSPanel::refresh_plans() {
 }
 
 void MT5FleetVPSPanel::refresh_instances() {
-    HttpClient::instance().get("http://localhost:8150/vps/status", [this](Result<QJsonDocument> r) {
+    HttpClient::instance().get("/vps/status", [this](Result<QJsonDocument> r) {
         if (r.is_err()) return;
         auto arr = r.value().object()["instances"].toArray();
         instances_table_->setRowCount(arr.size());
@@ -169,7 +169,7 @@ void MT5FleetVPSPanel::on_deploy() {
     payload["plan"] = plan;
     payload["ea_name"] = ea_name;
 
-    HttpClient::instance().post("http://localhost:8150/vps/deploy", payload,
+    HttpClient::instance().post("/vps/deploy", payload,
         [this, ea_name](Result<QJsonDocument> r) {
             if (r.is_err()) {
                 status_label_->setText("Deploy failed.");

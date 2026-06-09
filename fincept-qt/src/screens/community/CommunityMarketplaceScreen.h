@@ -42,7 +42,7 @@ class CommunityMarketplaceScreen : public QWidget {
     QVBoxLayout* tools_layout_ = nullptr;
     QVBoxLayout* agents_layout_ = nullptr;
     QNetworkAccessManager* net_ = nullptr;
-    QString base_url_ = "http://localhost:8150/community";
+    QString base_url_;
 };
 
 } // namespace fincept::screens

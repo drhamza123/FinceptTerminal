@@ -41,7 +41,12 @@ namespace fincept::ai_chat {
 
 static constexpr const char* kLlmSvcTag = "LlmService";
 
-
+// TLS variable definitions — declared extern in LlmRequestPolicy.h
+// so the init function lives in exactly one TU (MinGW GCC requirement).
+namespace detail {
+thread_local ProgressEmitter t_progress_emitter;
+thread_local QString t_chat_session_id;
+}
 
 LlmService::LlmService() = default;
 
@@ -63,7 +68,7 @@ void LlmService::ensure_config() const {
     // Called with mutex_ held. Cache is one-shot except for Fincept credentials —
     // those re-resolve every call so a login that happens after first ensure_config() doesn't 401 forever.
     if (config_loaded_) {
-        if (provider_ == "fincept") {
+        if (provider_.toLower() == "fincept") {
             const auto& sess = fincept::auth::AuthManager::instance().session();
             if (!sess.api_key.isEmpty()) {
                 api_key_ = sess.api_key;
@@ -338,8 +343,8 @@ QString LlmService::get_endpoint_url() const {
     const QString& p = provider_;
 
     // Fincept sync chat endpoint (async lives in fincept_async_request).
-    if (p == "fincept") {
-        return "http://localhost:8150/research/chat";
+    if (p.toLower() == "fincept") {
+        return fincept::AppConfig::instance().api_base_url() + QStringLiteral("/research/chat");
     }
 
     // Custom base_url wins over hard-coded defaults.
@@ -397,7 +402,7 @@ QMap<QString, QString> LlmService::get_headers() const {
     } else if (p == "gemini" || p == "google") {
         if (!api_key_.isEmpty())
             h["x-goog-api-key"] = api_key_;
-    } else if (p == "fincept") {
+    } else if (p.toLower() == "fincept") {
         if (!api_key_.isEmpty())
             h["X-API-Key"] = api_key_;
         // session_token only lives in AuthManager — read live, never cached.
@@ -410,7 +415,7 @@ QMap<QString, QString> LlmService::get_headers() const {
             h["Authorization"] = "Bearer " + api_key_;
         if (p == "openrouter") {
             // Attribution for the openrouter.ai/rankings leaderboard.
-            h["HTTP-Referer"] = "http://localhost:8150";
+            h["HTTP-Referer"] = fincept::AppConfig::instance().api_base_url();
             h["X-Title"] = "AI Stock Guardian";
         }
     }
@@ -436,7 +441,7 @@ LlmResponse LlmService::do_request(const QString& user_message, const std::vecto
     } else if (provider_ == "gemini" || provider_ == "google") {
         req_body = build_gemini_request(user_message, history);
         // Auth via x-goog-api-key header — do NOT append ?key= (would leak into access logs).
-    } else if (provider_ == "fincept") {
+    } else if (provider_.toLower() == "fincept") {
         // Fincept uses two separate endpoints:
         // Primary response → async (submit + poll, returns richer model output)
         // Follow-ups (tool results) → sync /research/chat
@@ -626,7 +631,7 @@ LlmResponse LlmService::do_request(const QString& user_message, const std::vecto
             }
         }
 
-    } else if (provider_ == "fincept") {
+    } else if (provider_.toLower() == "fincept") {
         // {"success":..., "data":{"choices":[{"message":{"content":...}}]}} or top-level shape.
         QJsonObject data = rj.contains("data") ? rj["data"].toObject() : rj;
         QJsonArray choices = data["choices"].toArray();
@@ -712,7 +717,7 @@ LlmResponse LlmService::do_streaming_request(const QString& user_message,
                                              const std::vector<ConversationMessage>& history, StreamCallback on_chunk) {
     // Gemini uses :streamGenerateContent, Fincept uses async submit/poll — neither
     // fits this OpenAI-compat SSE path. Fall back to do_request and emit as one chunk.
-    if (provider_ == "gemini" || provider_ == "google" || provider_ == "fincept") {
+    if (provider_ == "gemini" || provider_ == "google" || provider_.toLower() == "fincept") {
         detail::ProgressEmitterGuard pg([on_chunk](const QString& s) { on_chunk(s, false); });
         auto resp = do_request(user_message, history);
         if (resp.success && !resp.content.isEmpty())

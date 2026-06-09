@@ -45,6 +45,8 @@ class SmartOrderEngine : public QObject {
                                            const SmartOrder& order);
 
   signals:
+    void orderSubmitted(const QString& clientOrderId, const QString& symbol,
+                        const QString& side, double volume, double latencyMs);
     void orderFilled(int ticket, const QString& symbol, const QString& side,
                      double volume, double fillPrice, double latencyMs);
     void orderRejected(const QString& reason);

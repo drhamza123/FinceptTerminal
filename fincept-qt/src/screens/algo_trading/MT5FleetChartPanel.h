@@ -172,6 +172,7 @@ class MT5FleetChartPanel : public QWidget {
     void edit_indicator_params();
     void setup_shortcuts();
     void show_chart_context_menu(const QPoint& pos);
+    QPointF apply_magnet_snap(const QPointF& point) const;
 
     // Chart — CryptoChart with TradingView-like crosshair/OHLC tooltip
     QWidget* chart_container_ = nullptr;
@@ -194,6 +195,7 @@ class MT5FleetChartPanel : public QWidget {
     QGraphicsSimpleTextItem* last_tag_txt_ = nullptr;
 
     QLabel* ohlc_tooltip_ = nullptr;
+    QWidget* drawing_toolbar_ = nullptr;
 
     QLineSeries* price_series_ = nullptr;
     QCandlestickSeries* candlestick_series_ = nullptr;
@@ -247,6 +249,11 @@ class MT5FleetChartPanel : public QWidget {
     QPushButton* save_draw_btn_ = nullptr;
     QPushButton* load_draw_btn_ = nullptr;
     QPushButton* text_label_btn_ = nullptr;
+    QPushButton* magnet_btn_ = nullptr;
+    QPushButton* lock_draw_btn_ = nullptr;
+    QPushButton* hide_draw_btn_ = nullptr;
+    QPushButton* object_tree_btn_ = nullptr;
+    QPushButton* drawing_style_btn_ = nullptr;
     QCheckBox* log_scale_check_ = nullptr;
     QMenu* context_menu_ = nullptr;
 
@@ -264,6 +271,7 @@ class MT5FleetChartPanel : public QWidget {
     QPushButton* save_template_btn_ = nullptr;
     QPushButton* load_template_btn_ = nullptr;
     QPushButton* indicator_params_btn_ = nullptr;
+    QPushButton* replay_toggle_btn_ = nullptr;
     QDateEdit* date_from_ = nullptr;
     QDateEdit* date_to_ = nullptr;
     QPushButton* date_apply_btn_ = nullptr;
@@ -276,6 +284,7 @@ class MT5FleetChartPanel : public QWidget {
     QPushButton* replay_step_back_btn_ = nullptr;
 
     // Drawing tool buttons
+    QPushButton* cursor_btn_ = nullptr;
     QPushButton* trendline_btn_ = nullptr;
     QPushButton* hline_btn_ = nullptr;
     QPushButton* vline_btn_ = nullptr;
@@ -285,6 +294,7 @@ class MT5FleetChartPanel : public QWidget {
     QPushButton* fib_fan_btn_ = nullptr;
     QPushButton* gann_fan_btn_ = nullptr;
     QPushButton* elliott_btn_ = nullptr;
+    QVector<QPushButton*> drawing_tool_buttons_;
 
     enum class ChartStyle { Candlestick, Bar, Line, Area };
     void set_chart_style(ChartStyle style);
@@ -301,6 +311,9 @@ class MT5FleetChartPanel : public QWidget {
     bool is_placing_ = false;
     bool is_elliott_mode_ = false;
     bool is_text_label_mode_ = false;
+    bool magnet_enabled_ = false;
+    bool drawings_hidden_ = false;
+    bool drawings_locked_ = false;
     bool log_scale_enabled_ = false;
     bool fullscreen_enabled_ = false;
     bool crosshair_enabled_ = false;

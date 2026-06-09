@@ -208,7 +208,7 @@ void MT5FleetOrderPanel::set_symbol(const QString& sym) {
 void MT5FleetOrderPanel::set_balance(double bal) { current_balance_=bal; update_balance_label(); }
 
 void MT5FleetOrderPanel::refresh_positions() {
-    HttpClient::instance().get("http://localhost:8150/mt5/positions",
+    HttpClient::instance().get("/mt5/positions",
         [this](Result<QJsonDocument> r) {
             if (r.is_err()) return;
             auto arr = r.value().object()["data"].toArray();
@@ -287,7 +287,7 @@ void MT5FleetOrderPanel::place_order(const QString& side) {
 
     order_status_label_->setText(QString("Placing %1 %2 %3...").arg(type).arg(side).arg(symbol));
 
-    HttpClient::instance().post("http://localhost:8150" + endpoint, payload,
+    HttpClient::instance().post(endpoint, payload,
         [this, type, side, symbol](Result<QJsonDocument> r) {
             if (r.is_err()) {
                 QString err = QString::fromStdString(r.error());
@@ -311,7 +311,7 @@ void MT5FleetOrderPanel::place_order(const QString& side) {
             QJsonObject ts;
             ts["ticket"] = 0; // Will be updated when ticket known
             ts["distance"] = trailing_dist_spin_->value();
-            HttpClient::instance().post("http://localhost:8150/mt5/order/trailing-stop", ts,
+            HttpClient::instance().post("/mt5/order/trailing-stop", ts,
                 [](Result<QJsonDocument>) {}, this);
         });
     }
@@ -331,7 +331,7 @@ void MT5FleetOrderPanel::on_order_type_changed(int) {
 void MT5FleetOrderPanel::on_symbol_changed(int idx) {
     if(idx<0) return; current_symbol_=symbol_combo_->currentText();
     update_balance_label(); hide_error();
-    HttpClient::instance().get("http://localhost:8150/mt5/market/ohlc?symbol="+current_symbol_+"&timeframe=H1&count=3",
+    HttpClient::instance().get("/mt5/market/ohlc?symbol="+current_symbol_+"&timeframe=H1&count=3",
         [this](Result<QJsonDocument> r){
             if(r.is_err()) return;
             auto d=r.value().object()["data"].toArray();
@@ -355,7 +355,7 @@ void MT5FleetOrderPanel::on_amount_changed(const QString& s) {
 }
 
 void MT5FleetOrderPanel::update_balance_label() {
-    HttpClient::instance().get("http://localhost:8150/mt5/account",
+    HttpClient::instance().get("/mt5/account",
         [this](Result<QJsonDocument> r) {
             if (r.is_err()) return;
             auto data = r.value().object()["data"].toObject();

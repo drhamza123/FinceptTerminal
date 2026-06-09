@@ -62,7 +62,7 @@ void MT5FleetHoldingsBar::apply_theme() {
 }
 
 void MT5FleetHoldingsBar::refresh() {
-    HttpClient::instance().get("http://localhost:8150/mt5/ea/list",
+    HttpClient::instance().get("/mt5/ea/list",
         [this](Result<QJsonDocument> r) {
             if (r.is_err()) return;
             auto arr = r.value().object()["data"].toArray();

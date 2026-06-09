@@ -268,7 +268,7 @@ void PriceAlertDialog::on_toggle_alert() {
     payload["enabled"] = alert.enabled;
 
     HttpClient::instance().post(
-        "http://localhost:8150/mt5/alert/toggle",
+        "/mt5/alert/toggle",
         payload,
         [this](Result<QJsonDocument>) {
             load_alerts();
@@ -278,7 +278,7 @@ void PriceAlertDialog::on_toggle_alert() {
 
 void PriceAlertDialog::load_alerts() {
     HttpClient::instance().get(
-        "http://localhost:8150/mt5/alerts",
+        "/mt5/alerts",
         [this](Result<QJsonDocument> r) {
             if (r.is_err()) return;
             auto obj = r.value().object();
@@ -316,7 +316,7 @@ void PriceAlertDialog::save_alert(const PriceAlert& alert) {
     if (!alert.id.isEmpty()) payload["id"] = alert.id;
 
     HttpClient::instance().post(
-        "http://localhost:8150/mt5/alert/save",
+        "/mt5/alert/save",
         payload,
         [this](Result<QJsonDocument> r) {
             if (r.is_err()) {
@@ -330,7 +330,7 @@ void PriceAlertDialog::delete_alert(const QString& id) {
     payload["id"] = id;
 
     HttpClient::instance().post(
-        "http://localhost:8150/mt5/alert/delete",
+        "/mt5/alert/delete",
         payload,
         [this](Result<QJsonDocument> r) {
             if (r.is_err()) {

@@ -148,7 +148,7 @@ void MT5FleetEcoCalendarPanel::hideEvent(QHideEvent* e) {
 
 void MT5FleetEcoCalendarPanel::refresh_events() {
     HttpClient::instance().get(
-        "http://localhost:8150/macro/upcoming-events?limit=60",
+        "/macro/upcoming-events?limit=60",
         [this](Result<QJsonDocument> r) {
             if (r.is_err()) return;
             auto obj = r.value().object();

@@ -217,7 +217,7 @@ void MT5FleetMarketWatchPanel::fetch_quote(const QString& symbol) {
     active_requests_.insert(symbol);
 
     HttpClient::instance().get(
-        QString("http://localhost:8150/mt5/market/orderbook?symbol=%1").arg(symbol),
+        QString("/mt5/market/orderbook?symbol=%1").arg(symbol),
         [this, symbol](Result<QJsonDocument> r) {
             active_requests_.remove(symbol);
             if (r.is_err()) return;
@@ -235,7 +235,7 @@ void MT5FleetMarketWatchPanel::fetch_quote(const QString& symbol) {
 
             // Also fetch OHLC for high/low
             HttpClient::instance().get(
-                QString("http://localhost:8150/mt5/market/ohlc?symbol=%1&timeframe=D1&count=1").arg(symbol),
+                QString("/mt5/market/ohlc?symbol=%1&timeframe=D1&count=1").arg(symbol),
                 [this, symbol, last_price, spread, bid, ask](Result<QJsonDocument> r2) {
                     if (r2.is_err()) return;
                     auto arr = r2.value().object()["data"].toArray();

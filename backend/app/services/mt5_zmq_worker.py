@@ -20,19 +20,32 @@ class MT5ZMQBridge:
         self.mt5_connected = False
 
     async def start(self):
+        import asyncio
+        try:
+            asyncio.get_running_loop()
+        except RuntimeError:
+            pass
+
         self.context = zmq.asyncio.Context()
 
         # PULL: receives binary msgpack orders from C++ SmartOrderEngine
-        self.pull_socket = self.context.socket(zmq.PULL)
-        self.pull_socket.bind(f"tcp://127.0.0.1:{self.pull_port}")
-        self.pull_socket.setsockopt(zmq.RCVHWM, 1000)
-        logger.info(f"ZMQ PULL bound on port {self.pull_port}")
+        try:
+            self.pull_socket = self.context.socket(zmq.PULL)
+            self.pull_socket.setsockopt(zmq.RCVHWM, 1000)
+            self.pull_socket.bind(f"tcp://127.0.0.1:{self.pull_port}")
+            logger.info(f"ZMQ PULL bound on port {self.pull_port}")
+        except Exception as e:
+            logger.warning(f"ZMQ PULL bind failed on {self.pull_port}: {e} — running without ZMQ bridge")
+            self.mt5_connected = False
+            return
 
         # REQ: forwards orders to MT5 EA (FinceptMT5EA.mq5)
+        # Only attempt if MT5 is expected to be running
         self.req_socket = self.context.socket(zmq.REQ)
+        self.req_socket.setsockopt(zmq.LINGER, 0)  # Don't block on close
+        self.req_socket.setsockopt(zmq.CONNECT_TIMEOUT, 2000)  # 2s connect timeout
         try:
             self.req_socket.connect(f"tcp://127.0.0.1:{self.mt5_port}")
-            self.req_socket.setsockopt(zmq.LINGER, 100)
             self.mt5_connected = True
             logger.info(f"ZMQ REQ connected to MT5 on port {self.mt5_port}")
         except Exception as e:

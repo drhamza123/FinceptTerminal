@@ -49,6 +49,20 @@ def cmd_ping(ea_key: str) -> str:
     return json.dumps({"type": "ping", "ea_key": ea_key}) + "\n"
 
 
+def cmd_market_order(ea_key: str, client_order_id: str, side: str, volume: float,
+                     symbol: str, sl: float = 0, tp: float = 0) -> str:
+    return json.dumps({
+        "type": "market_order",
+        "ea_key": ea_key,
+        "client_order_id": client_order_id,
+        "side": side,
+        "volume": volume,
+        "symbol": symbol,
+        "sl": sl,
+        "tp": tp,
+    }) + "\n"
+
+
 # ── Advanced Order Types ────────────────────────────────────────
 
 

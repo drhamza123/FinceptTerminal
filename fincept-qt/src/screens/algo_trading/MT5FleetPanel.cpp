@@ -1,5 +1,6 @@
 // MT5FleetPanel.cpp — Portfolio-style EA Fleet + Markets
 #include "screens/algo_trading/MT5FleetPanel.h"
+#include "core/config/AppConfig.h"
 #include "network/http/HttpClient.h"
 #include "ui/theme/Theme.h"
 
@@ -12,6 +13,17 @@ namespace fincept::screens {
 
 using namespace fincept::ui::colors;
 
+namespace {
+QString mt5_ws_url(const QString& path) {
+    QUrl url(fincept::AppConfig::instance().api_base_url());
+    const QString scheme = url.scheme().toLower() == QStringLiteral("https") ? QStringLiteral("wss")
+                                                                             : QStringLiteral("ws");
+    url.setScheme(scheme);
+    url.setPath(path);
+    return url.toString();
+}
+} // namespace
+
 static const QStringList kCryptoS = {"BTCUSD","ETHUSD","SOLUSD","XRPUSD","ADAUSD","DOTUSD"};
 static const QStringList kForexS = {"EURUSD","GBPUSD","USDJPY","AUDUSD","USDCAD","NZDUSD"};
 static const QStringList kStockS = {"AAPL","MSFT","GOOGL","AMZN","TSLA","META","NVDA"};
@@ -19,7 +31,7 @@ static const QStringList kStockS = {"AAPL","MSFT","GOOGL","AMZN","TSLA","META","
 MT5FleetPanel::MT5FleetPanel(QWidget* parent)
     : QWidget(parent), chart_(nullptr), chart_view_(nullptr)
     , ws_(new QWebSocket("", QWebSocketProtocol::VersionLatest, this))
-    , reconnect_timer_(new QTimer(this)), api_base_("http://localhost:8150"), ws_connected_(false)
+    , reconnect_timer_(new QTimer(this)), api_base_(""), ws_connected_(false)
 {
     setupUi();
     connect(ws_, &QWebSocket::connected, this, [this](){
@@ -49,7 +61,7 @@ MT5FleetPanel::MT5FleetPanel(QWidget* parent)
     connect(market_tabs_, &QTabWidget::currentChanged, this, &MT5FleetPanel::onTabChanged);
     connect(view_selector_, &QComboBox::currentIndexChanged, this, &MT5FleetPanel::onTabChanged);
 
-    ws_->open(QUrl("ws://localhost:8150/ws/mt5"));
+    ws_->open(QUrl(mt5_ws_url(QStringLiteral("/ws/mt5"))));
     refresh_timer_->start();
     refreshEAs();
 }
