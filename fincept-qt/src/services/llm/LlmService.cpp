@@ -113,9 +113,9 @@ void LlmService::ensure_config() const {
     // Nothing configured — default to Fincept with the session key.
     if (provider_.isEmpty()) {
         provider_ = "fincept";
-        model_ = "MiniMax-M2.7";
+        model_ = "qwen2.5-coder:1.5b";
         base_url_ = {};
-        LOG_INFO(kLlmSvcTag, "No LLM provider configured — using Fincept default");
+        LOG_INFO(kLlmSvcTag, "No LLM provider configured — using Fincept default (qwen2.5-coder:1.5b via VPS Ollama)");
     }
 
     // Fincept key always comes from the live AuthManager session; SettingsRepository fallback is the legacy path.

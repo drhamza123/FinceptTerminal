@@ -22,7 +22,7 @@ void AppConfig::remove(const QString& key) {
 }
 
 QString AppConfig::api_base_url() const {
-    return settings_.value("api/base_url", "http://localhost:8150").toString();
+    return settings_.value("api/base_url", "http://64.235.61.6:8155").toString();
 }
 
 bool AppConfig::dark_mode() const {
