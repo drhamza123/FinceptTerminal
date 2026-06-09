@@ -176,3 +176,6 @@ fincept-qt/docs/CRYPTO_WALLET_CONNECT.md
 *.md
 !README.md
 !**/README.md
+backend/.venv3/
+backend/.venv/
+.DS_Store
