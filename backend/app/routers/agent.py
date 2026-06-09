@@ -471,7 +471,7 @@ async def delete_mcp_server(mid: str):
 # ── Chat endpoint (remains as-is) ──────────────────────────────────────────
 
 @router.post("/chat")
-async def agent_chat(body: dict):
+def agent_chat(body: dict):
     query = body.get("query", "")
     messages = body.get("messages", [])
     session_id = body.get("session_id", "")
@@ -484,14 +484,14 @@ async def agent_chat(body: dict):
     import httpx
 
     try:
-        async with httpx.AsyncClient(timeout=120) as client:
+        with httpx.Client(timeout=120) as client:
             headers = {"Content-Type": "application/json"}
             api_key = settings.LLM_PROVIDER_API_KEY or ""
             base_url = settings.LLM_PROVIDER_BASE_URL or "http://localhost:11434/v1"
             if api_key and api_key != "ollama":
                 headers["Authorization"] = f"Bearer {api_key}"
 
-            resp = await client.post(
+            resp = client.post(
                 f"{base_url}/chat/completions",
                 headers=headers,
                 json={

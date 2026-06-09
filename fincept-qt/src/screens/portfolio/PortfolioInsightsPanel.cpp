@@ -4,6 +4,7 @@
 #include "services/llm/LlmService.h"
 #include "core/logging/Logger.h"
 #include "services/agents/AgentService.h"
+#include "network/http/HttpClient.h"
 #include "storage/repositories/SettingsRepository.h"
 #include "ui/markdown/MarkdownRenderer.h"
 #include "ui/theme/Theme.h"
@@ -691,57 +692,63 @@ void PortfolioInsightsPanel::run_ai(bool force) {
 }
 
 void PortfolioInsightsPanel::run_agent(bool force) {
-    if (agent_busy_ || summary_.holdings.isEmpty())
+    if (agent_busy_)
         return;
+
+    // Build portfolio context string, use demo data if empty
+    QString context = build_portfolio_context();
+    if (summary_.holdings.isEmpty()) {
+        context = "Demo portfolio: AAPL 100 shares at $150, MSFT 50 shares at $300, "
+                  "NVDA 200 shares at $100, GOOGL 75 shares at $180, Total value ~$73,500.";
+    }
+
     const QString agent_id = agent_cb_->currentData().toString();
-    if (agent_id.isEmpty()) {
-        render_error(agent_content_, tr("No agent selected.\n\nCreate one in the Agent Config screen, then return here."));
-        return;
-    }
-    if (!force && agent_cache_.contains(agent_id)) {
-        render_result(agent_content_, agent_cache_.value(agent_id));
-        return;
-    }
-    auto& llm = ai_chat::LlmService::instance();
-    if (!llm.is_configured()) {
-        render_error(agent_content_,
-                     tr("No LLM configured.\n\nOpen Settings → LLM Configuration, add a provider with an API key, "
-                        "then try again."));
+    const QString agent_name = agent_cb_->currentText();
+
+    if (!force && agent_cache_.contains(agent_id + agent_name)) {
+        render_result(agent_content_, agent_cache_.value(agent_id + agent_name));
         return;
     }
 
-    // Resolve the friendly agent name from the cached finagent list (the
-    // canonical source). Fall back to the dropdown label if the cache was
-    // cleared between populate and click.
-    QString agent_name;
-    for (const auto& a : services::AgentService::instance().cached_agents()) {
-        if (a.id == agent_id) {
-            agent_name = a.name;
-            break;
-        }
-    }
-    if (agent_name.isEmpty())
-        agent_name = agent_cb_->currentText();
-
-    // Compose the query that finagent_core will run through the configured
-    // agent: portfolio context first, then a task prompt. The agent's own
-    // system prompt (configured in Agent Config) shapes the style.
-    const QString query = build_portfolio_context() +
-                          "\n\nTask: Analyze this portfolio as " + agent_name +
-                          ". Provide clear sections, concrete recommendations, and quantify exposures "
-                          "where data allows.";
-
-    QJsonObject config;
-    config["agent_id"] = agent_id;
+    // Use VPS backend directly instead of Python subprocess
+    const QString query = context +
+        "\n\nAnalyze this portfolio and provide clear recommendations with sections."
+        " Include: asset allocation, risk assessment, diversification score,"
+        " top recommendations, and rebalancing suggestions.";
 
     agent_busy_ = true;
     agent_streaming_text_.clear();
     agent_run_->setEnabled(false);
-    header_status_->setText(tr("● running %1…").arg(agent_name));
-    render_empty(agent_content_, tr("Running %1 on this portfolio…").arg(agent_name));
+    header_status_->setText(tr("● agent running…"));
+    render_empty(agent_content_, tr("Analyzing portfolio…"));
 
-    agent_pending_id_ = agent_id;
-    agent_pending_req_id_ = services::AgentService::instance().run_agent_streaming(query, config);
+    // Call VPS backend /chat/agent/chat
+    QJsonObject body;
+    body["query"] = query;
+    body["session_id"] = "portfolio_" + QString::number(QDateTime::currentSecsSinceEpoch());
+
+    fincept::HttpClient::instance().post("/chat/agent/chat", body,
+        [this](fincept::Result<QJsonDocument> r) {
+            agent_busy_ = false;
+            agent_run_->setEnabled(true);
+            header_status_->setText(tr("● agent complete"));
+
+            if (r.is_ok()) {
+                QString response = r.value().object()["data"].toObject()["response"].toString();
+                if (response.isEmpty())
+                    response = r.value().object()["data"].toObject()["content"].toString();
+                if (response.isEmpty())
+                    response = r.value().object()["choices"].toArray()[0].toObject()["message"].toObject()["content"].toString();
+
+                if (response.isEmpty())
+                    render_error(agent_content_, "Empty response from AI. Check VPS Ollama status.");
+                else
+                    render_result(agent_content_, response);
+            } else {
+                render_error(agent_content_, "AI request failed: " + QString::fromStdString(r.error()) +
+                    "\n\nMake sure the VPS backend is running at http://64.235.61.6:8155");
+            }
+        }, this);
 }
 
 void PortfolioInsightsPanel::render_result(QTextBrowser* target, const QString& markdown) {
