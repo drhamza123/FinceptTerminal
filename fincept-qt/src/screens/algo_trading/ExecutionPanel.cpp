@@ -141,7 +141,7 @@ void ExecutionPanel::place_order() {
 
 void ExecutionPanel::close_position(const QString& symbol) {
     QJsonObject body; body["symbol"] = symbol; body["side"] = "SELL"; body["volume"] = 0;
-    HttpClient::instance().post("/mt5/order/market", body,
+    HttpClient::instance().post("/mt5/worker/order", body,
         [this](Result<QJsonDocument>) { refresh(); }, this);
 }
 

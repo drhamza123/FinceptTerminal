@@ -33,6 +33,7 @@ class CryptoBottomPanel;
 } // namespace fincept::screens::crypto
 
 namespace fincept::screens {
+namespace fno { class ChainSubTab; }
 
 enum class ExecutionMode { CryptoWallet, CryptoTrade, Stocks, MT5, BrokerApi };
 
@@ -192,6 +193,17 @@ class ExecutionScreen : public QWidget, public IStatefulScreen, public IGroupLin
     class MT5FleetChartPanel* mt5_chart_ = nullptr;
     QSplitter* center_splitter_ = nullptr;
     void swap_chart_for_mode(ExecutionMode mode);
+
+    // ── Multi-chart, Bar Replay, Options ──
+    QPushButton* multi_chart_btn_ = nullptr;
+    QPushButton* replay_btn_ = nullptr;
+    QPushButton* options_btn_ = nullptr;
+    class MT5FleetMultiChartContainer* multi_chart_widget_ = nullptr;
+    class TickReplayWidget* replay_widget_ = nullptr;
+    fno::ChainSubTab* options_widget_ = nullptr;
+    void toggle_multi_chart();
+    void toggle_replay();
+    void toggle_options();
 
     // ── Wallet display ──
     QLabel* bal_lbl_ = nullptr;

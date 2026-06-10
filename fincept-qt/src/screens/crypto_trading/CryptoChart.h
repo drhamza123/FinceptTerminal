@@ -32,6 +32,8 @@ class HoverChartView : public QChartView {
     HoverChartView(QChart* chart, CryptoChart* host);
   protected:
     void mouseMoveEvent(QMouseEvent* e) override;
+    void mousePressEvent(QMouseEvent* e) override;
+    void mouseReleaseEvent(QMouseEvent* e) override;
     void leaveEvent(QEvent* e) override;
     void wheelEvent(QWheelEvent* e) override;
   private:
@@ -131,6 +133,18 @@ class CryptoChart : public QWidget {
     int chart_mode_ = 0;
     QPushButton* chart_mode_btn_ = nullptr;
     void cycle_chart_mode();
+
+    // Drawing tools
+    QPushButton* draw_toggle_ = nullptr;
+    QWidget* draw_toolbar_ = nullptr;
+    int active_draw_tool_ = -1;
+    bool draw_placing_ = false;
+    QPointF draw_start_pt_;
+    QVector<class QGraphicsItem*> draw_items_;
+    void toggle_draw_toolbar();
+    void on_draw_tool_clicked(int tool);
+    void clear_drawings();
+    void place_drawing(const QPointF& chart_pos);
 
     // Volume Footprint + Renko + Position Sizing + Kagi + P&F
     QPushButton* vfp_toggle_ = nullptr;

@@ -31,6 +31,7 @@
 #include "screens/crypto_trading/PositionSizingTool.h"
 #include "screens/crypto_trading/KagiChart.h"
 #include "screens/crypto_trading/PointFigureChart.h"
+#include "screens/algo_trading/DrawingObject.h"
 
 #include "ui/charts/CandleData.h"
 #include "ui/charts/ChartOverlayManager.h"
@@ -42,6 +43,7 @@
 #include "ui/charts/layers/PivotLayer.h"
 
 #include "ui/theme/Theme.h"
+#include "core/logging/Logger.h"
 
 #include <QCandlestickSeries>
 #include <QCandlestickSet>
@@ -251,6 +253,44 @@ CryptoChart::CryptoChart(QWidget* parent) : QWidget(parent) {
     sizing_btn->setToolTip("Position Sizing Calculator");
     connect(sizing_btn, &QPushButton::clicked, this, &CryptoChart::toggle_sizing);
     h_layout->addWidget(sizing_btn);
+
+    // Drawing tools toggle
+    draw_toggle_ = new QPushButton("DRAW");
+    draw_toggle_->setObjectName("cryptoTfBtn");
+    draw_toggle_->setCursor(Qt::PointingHandCursor);
+    draw_toggle_->setToolTip("Toggle drawing tools (Trend Line, Fibonacci, etc.)");
+    connect(draw_toggle_, &QPushButton::clicked, this, &CryptoChart::toggle_draw_toolbar);
+    h_layout->addWidget(draw_toggle_);
+
+    // Drawing toolbar (hidden by default)
+    draw_toolbar_ = new QWidget(this);
+    draw_toolbar_->setObjectName("chartDrawToolRail");
+    draw_toolbar_->setVisible(false);
+    auto* draw_layout = new QHBoxLayout(draw_toolbar_);
+    draw_layout->setContentsMargins(2, 0, 2, 0);
+    draw_layout->setSpacing(2);
+    struct DrawTool { const char* label; int tool; const char* tip; };
+    DrawTool dtools[] = {
+        {"↕", 0, "Trend Line"}, {"─", 1, "Horizontal Line"}, {"│", 2, "Vertical Line"},
+        {"□", 3, "Channel"}, {"↗", 4, "Ray"}, {"Fib", 5, "Fibonacci Retrace"},
+        {"◯", 6, "Fib Arc"}, {"⛭", 7, "Gann Fan"}, {"⬡", 8, "Gann Square"},
+        {"EW", 9, "Elliott Wave"}, {"⋔", 10, "Andrews Pitchfork"},
+        {"◎", 11, "Cycle Line"}, {"✎", 12, "Text Label"}, {"✕", 13, "Clear All"},
+    };
+    for (auto& d : dtools) {
+        auto* btn = new QPushButton(QString(d.label), draw_toolbar_);
+        btn->setObjectName("chartRailToolBtn");
+        btn->setFixedSize(24, 24);
+        btn->setToolTip(d.tip);
+        btn->setCursor(Qt::PointingHandCursor);
+        connect(btn, &QPushButton::clicked, this, [this, t = d.tool]() {
+            if (t == 13) { clear_drawings(); return; }
+            on_draw_tool_clicked(t);
+        });
+        draw_layout->addWidget(btn);
+    }
+    draw_layout->addStretch();
+    layout->addWidget(draw_toolbar_);
 
     h_layout->addStretch();
     layout->addWidget(header);
@@ -924,5 +964,125 @@ void CryptoChart::toggle_sizing() {
         sizing_tool_ = nullptr;
     }
 }
+
+// ── Drawing Tools ────────────────────────────────────────────────
+
+void CryptoChart::toggle_draw_toolbar() {
+    bool visible = !draw_toolbar_->isVisible();
+    draw_toolbar_->setVisible(visible);
+    draw_toggle_->setProperty("active", visible);
+    draw_toggle_->style()->unpolish(draw_toggle_);
+    draw_toggle_->style()->polish(draw_toggle_);
+    if (!visible) active_draw_tool_ = -1;
+}
+
+void CryptoChart::on_draw_tool_clicked(int tool) {
+    active_draw_tool_ = tool;
+    draw_placing_ = true;
+    draw_toggle_->setText("DRAW: ON");
+}
+
+void CryptoChart::clear_drawings() {
+    for (auto* item : draw_items_) {
+        if (item && item->scene()) item->scene()->removeItem(item);
+        delete item;
+    }
+    draw_items_.clear();
+}
+
+void CryptoChart::place_drawing(const QPointF& chart_pos) {
+    if (active_draw_tool_ < 0) return;
+    auto* scene = chart_view_->scene();
+    if (!scene) return;
+
+    // Map chart coordinates to scene coordinates
+    QPointF scene_pos = chart_->mapToPosition(chart_pos);
+    QPointF plot_tl = chart_->mapToPosition(QPointF(chart_->plotArea().left(), chart_->plotArea().top()));
+
+    QGraphicsItem* item = nullptr;
+    QPen pen(QColor(100, 180, 255), 1.5);
+
+    switch (active_draw_tool_) {
+        case 0: { // Trend Line
+            if (draw_items_.isEmpty()) {
+                auto* tl = new QGraphicsLineItem();
+                tl->setPen(pen);
+                tl->setLine(scene_pos.x(), scene_pos.y(), scene_pos.x() + 50, scene_pos.y());
+                scene->addItem(tl);
+                item = tl;
+            }
+            break;
+        }
+        case 1: { // Horizontal Line
+            auto* hl = new QGraphicsLineItem();
+            hl->setPen(QPen(QColor(255, 200, 100), 1.5));
+            hl->setLine(chart_->plotArea().left(), scene_pos.y(), chart_->plotArea().right(), scene_pos.y());
+            scene->addItem(hl);
+            item = hl;
+            break;
+        }
+        case 2: { // Vertical Line
+            auto* vl = new QGraphicsLineItem();
+            vl->setPen(QPen(QColor(100, 200, 255), 1.5));
+            vl->setLine(scene_pos.x(), chart_->plotArea().top(), scene_pos.x(), chart_->plotArea().bottom());
+            scene->addItem(vl);
+            item = vl;
+            break;
+        }
+        case 5: { // Fibonacci Retrace
+            double y0 = scene_pos.y();
+            double y1 = y0 + 150;
+            QColor fc(100, 180, 255);
+            for (int i = 0; i < 5; i++) {
+                double frac = (i + 1) * 0.236;
+                double y = y0 + (y1 - y0) * frac;
+                auto* line = new QGraphicsLineItem();
+                line->setPen(QPen(fc, 0.5));
+                line->setLine(chart_->plotArea().left(), y, chart_->plotArea().right(), y);
+                scene->addItem(line);
+                draw_items_.append(line);
+            }
+            auto* main = new QGraphicsLineItem();
+            main->setPen(QPen(fc, 1.5));
+            main->setLine(chart_->plotArea().left(), y0, chart_->plotArea().right(), y0);
+            scene->addItem(main);
+            item = main;
+            break;
+        }
+        case 12: { // Text Label
+            auto* txt = new QGraphicsSimpleTextItem("Label");
+            txt->setPos(scene_pos);
+            txt->setBrush(QColor(200, 200, 200));
+            txt->setFont(QFont("Consolas", 9));
+            scene->addItem(txt);
+            item = txt;
+            break;
+        }
+    }
+    if (item) {
+        item->setZValue(30);
+        draw_items_.append(item);
+    }
+    draw_placing_ = false;
+    active_draw_tool_ = -1;
+    draw_toggle_->setText("DRAW");
+}
+
+
+// ── HoverChartView drawing mouse handlers ────────────────────────
+
+void HoverChartView::mousePressEvent(QMouseEvent* e) {
+    if (host_ && host_->active_draw_tool_ >= 0 && host_->draw_placing_) {
+        QPointF chart_pt = host_->chart_->mapToValue(e->pos());
+        host_->place_drawing(chart_pt);
+        return;
+    }
+    QChartView::mousePressEvent(e);
+}
+
+void HoverChartView::mouseReleaseEvent(QMouseEvent* e) {
+    QChartView::mouseReleaseEvent(e);
+}
+
 
 } // namespace fincept::screens::crypto

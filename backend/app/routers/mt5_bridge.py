@@ -1924,16 +1924,17 @@ async def mt5_config(user=Depends(resolve_user)):
 # ── Download FinceptTerminal.exe for Windows ──────────────────
 
 @router.get("/download/terminal")
-async def download_terminal():
-    """Download the FinceptTerminal Windows .exe zip package."""
+def download_terminal():
+    """Download AI Stock Guardian Windows installer."""
     from fastapi.responses import FileResponse
     import os
-    # Try v2 (latest build with full Qt DLLs), fall back to original
-    import os
+    # Try NSIS installer first, fall back to zip
+    setup_path = r"C:\opt\AI_Stock_Guardian_Setup.exe"
     zip_path = r"C:\opt\FinceptTerminal_v2.zip"
-    if not os.path.exists(zip_path):
-        zip_path = r"C:\opt\FinceptTerminal.zip"
+    if os.path.exists(setup_path):
+        return FileResponse(setup_path, media_type="application/x-msdownload",
+                            filename="AI_Stock_Guardian_Setup.exe")
     if os.path.exists(zip_path):
         return FileResponse(zip_path, media_type="application/zip",
-                            filename="FinceptTerminal.zip")
+                            filename="AI_Stock_Guardian.zip")
     return {"success": False, "error": "Build not found on this server"}

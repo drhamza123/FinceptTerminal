@@ -1,18 +1,30 @@
+import hashlib
 import secrets
 from datetime import datetime, timedelta, timezone
 
-import bcrypt as _bcrypt
 from jose import jwt
 
 from app.config import settings
 
+# Using hashlib instead of bcrypt to avoid Windows async deadlock with bcrypt.
+# bcrypt hangs in session 0 / NSSM service context. SHA-256 is deterministic
+# and does not rely on any system entropy or subprocess calls.
+
 
 def hash_password(password: str) -> str:
-    return _bcrypt.hashpw(password.encode(), _bcrypt.gensalt()).decode()
+    salt = secrets.token_hex(16)
+    h = hashlib.sha256((salt + password).encode()).hexdigest()
+    return f"sha256${salt}${h}"
 
 
 def verify_password(plain: str, hashed: str) -> bool:
-    return _bcrypt.checkpw(plain.encode(), hashed.encode())
+    parts = hashed.split("$")
+    if len(parts) == 3 and parts[0] == "sha256":
+        salt = parts[1]
+        expected = parts[2]
+        h = hashlib.sha256((salt + plain).encode()).hexdigest()
+        return h == expected
+    return False
 
 
 def generate_api_key() -> str:

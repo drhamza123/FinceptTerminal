@@ -239,7 +239,7 @@ void MT5FleetOrderBookPanel::on_buy_clicked() {
     payload["side"] = "BUY";
     payload["volume"] = volume;
 
-    HttpClient::instance().post("/mt5/order/market", payload,
+    HttpClient::instance().post("/mt5/worker/order", payload,
         [this](Result<QJsonDocument> r) {
             if (r.is_err()) { last_price_label_->setText("BUY failed"); return; }
             auto obj = r.value().object();
@@ -268,7 +268,7 @@ void MT5FleetOrderBookPanel::on_sell_clicked() {
     payload["side"] = "SELL";
     payload["volume"] = volume;
 
-    HttpClient::instance().post("/mt5/order/market", payload,
+    HttpClient::instance().post("/mt5/worker/order", payload,
         [this](Result<QJsonDocument> r) {
             if (r.is_err()) { last_price_label_->setText("SELL failed"); return; }
             auto obj = r.value().object();

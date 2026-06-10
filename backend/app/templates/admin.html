@@ -1,0 +1,152 @@
+<!DOCTYPE html>
+<html lang="en">
+<head><meta charset="UTF-8"><title>Fincept Admin</title>
+<style>
+* { margin:0; padding:0; box-sizing:border-box; }
+body { font-family:system-ui,sans-serif; background:#0a0a0f; color:#e5e5e5; padding:20px; }
+h1 { color:#f59e0b; font-size:22px; margin-bottom:20px; }
+h2 { color:#e5e5e5; font-size:16px; margin:20px 0 10px; border-bottom:1px solid #1a1a2e; padding-bottom:6px; }
+.card { background:#111118; border:1px solid #1a1a2e; border-radius:6px; padding:15px; margin-bottom:15px; }
+table { width:100%; border-collapse:collapse; font-size:13px; }
+th { background:#1a1a2e; color:#808090; padding:8px 10px; text-align:left; font-weight:600; }
+td { padding:6px 10px; border-bottom:1px solid #1a1a2e; }
+tr:hover td { background:#1a1a2e; }
+.badge { display:inline-block; padding:2px 8px; border-radius:3px; font-size:11px; font-weight:600; }
+.free { background:#1a3a1a; color:#4ade80; }
+.starter { background:#1a2a3a; color:#60a5fa; }
+.pro { background:#3a1a1a; color:#f87171; }
+.premium { background:#3a2a1a; color:#fbbf24; }
+input, select { background:#0a0a0f; border:1px solid #1a1a2e; color:#e5e5e5; padding:6px 10px; border-radius:4px; font-size:13px; }
+input:focus { outline:none; border-color:#f59e0b; }
+button { background:#f59e0b; color:#0a0a0f; border:none; padding:6px 14px; border-radius:4px; font-weight:600; cursor:pointer; font-size:13px; }
+button:hover { background:#d97706; }
+button.danger { background:#dc2626; }
+button.danger:hover { background:#b91c1c; }
+.btn-sm { padding:3px 10px; font-size:11px; }
+.form-row { display:flex; gap:8px; align-items:end; flex-wrap:wrap; margin-top:8px; }
+.form-row label { font-size:11px; color:#808090; display:block; margin-bottom:2px; }
+.msg { padding:8px 12px; border-radius:4px; margin-bottom:10px; display:none; font-size:13px; }
+.msg.ok { background:#1a3a1a; color:#4ade80; display:block; }
+.msg.err { background:#3a1a1a; color:#f87171; display:block; }
+.stats { display:flex; gap:15px; flex-wrap:wrap; }
+.stat-box { background:#111118; border:1px solid #1a1a2e; border-radius:6px; padding:12px 20px; text-align:center; min-width:100px; }
+.stat-box .num { font-size:24px; font-weight:700; color:#f59e0b; }
+.stat-box .lbl { font-size:11px; color:#808090; margin-top:2px; }
+.status { color:#4ade80; } .status.pending { color:#fbbf24; } .srv { color:#808090; }
+</style></head>
+<body>
+<h1>⚡ Fincept Admin Panel</h1>
+<div id="msg" class="msg"></div>
+
+<div class="stats" id="stats"></div>
+
+<h2>📋 Users</h2>
+<div class="card"><table><thead><tr>
+<th>ID</th><th>Email</th><th>Username</th><th>Plan</th><th>Credits</th><th>Verified</th><th>Created</th><th>Actions</th>
+</tr></thead><tbody id="user-table"></tbody></table></div>
+
+<div style="display:flex; gap:20px; flex-wrap:wrap;">
+<div class="card" style="flex:1; min-width:300px;">
+<h2>➕ Add User</h2>
+<div class="form-row"><label>Email <input id="add-email" placeholder="user@email.com"></label>
+<label>Password <input id="add-pass" value="Fincept123!"></label>
+<label>Plan <select id="add-plan"><option value="free">Free</option><option value="starter">Starter ($30)</option><option value="pro">Pro ($50)</option></select></label>
+<label>Credits <input id="add-credits" value="100" style="width:70px"></label>
+<button onclick="addUser()">Add User</button></div>
+</div>
+
+<div class="card" style="flex:1; min-width:300px;">
+<h2>💰 Add Credits</h2>
+<div class="form-row"><label>Email <input id="cred-email" placeholder="user@email.com"></label>
+<label>Credits <input id="cred-amount" value="500" style="width:70px"></label>
+<button onclick="addCredits()">Add Credits</button></div>
+</div>
+</div>
+
+<h2>📦 Plans</h2>
+<div class="card"><table><thead><tr><th>Plan</th><th>Price</th><th>Credits</th><th>Features</th></tr></thead>
+<tbody id="plans-table"></tbody></table></div>
+
+<h2>🖥️ VPS Services</h2>
+<div class="card" id="services-status">Loading...</div>
+
+<script>
+const API = window.location.origin;
+
+function msg(text, ok=true) {
+  const m = document.getElementById('msg');
+  m.textContent = text; m.className = 'msg ' + (ok?'ok':'err');
+  setTimeout(() => m.style.display='none', 5000);
+}
+
+async function loadUsers() {
+  const r = await fetch(API + '/admin/users');
+  const d = await r.json();
+  if (!d.success) return;
+  const t = document.getElementById('user-table');
+  t.innerHTML = '';
+  d.data.forEach(u => {
+    const tr = document.createElement('tr');
+    tr.innerHTML = `<td>${u.id}</td><td>${u.email}</td><td>${u.username}</td>
+      <td><span class="badge ${u.plan}">${u.plan}</span></td>
+      <td>${u.credits}</td><td>${u.verified?'✅':'❌'}</td><td style="font-size:11px;color:#808090">${u.created||''}</td>
+      <td><button class="btn-sm danger" onclick="deleteUser(${u.id})">✕</button></td>`;
+    t.appendChild(tr);
+  });
+  // Stats
+  document.getElementById('stats').innerHTML = `
+    <div class="stat-box"><div class="num">${d.data.length}</div><div class="lbl">Total Users</div></div>
+    <div class="stat-box"><div class="num">${d.data.filter(u=>u.plan==='pro').length}</div><div class="lbl">Pro Users</div></div>
+    <div class="stat-box"><div class="num">${d.data.reduce((s,u)=>s+u.credits,0)}</div><div class="lbl">Total Credits</div></div>`;
+}
+
+async function loadPlans() {
+  const r = await fetch(API + '/cashfree/plans');
+  const d = await r.json();
+  const t = document.getElementById('plans-table');
+  t.innerHTML = '';
+  d.data.forEach(p => {
+    t.innerHTML += `<tr><td><b>${p.name}</b></td><td>$${p.price_usd}</td><td>${p.credits}</td><td style="font-size:11px;color:#808090">${p.features.slice(0,3).join(', ')}</td></tr>`;
+  });
+}
+
+async function addUser() {
+  const body = {email: get('add-email'), password: get('add-pass'), plan: get('add-plan'), credits: parseInt(get('add-credits'))};
+  if(!body.email) return msg('Email required', false);
+  const r = await fetch(API + '/admin/users/add', {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify(body)});
+  const d = await r.json();
+  if(d.success) { msg('User created! API Key: ' + d.data.api_key.slice(0,20)+'...'); loadUsers(); }
+  else msg(d.detail?.message || 'Failed', false);
+}
+
+async function deleteUser(id) {
+  if(!confirm('Delete user #'+id+'?')) return;
+  const r = await fetch(API + '/admin/users/'+id, {method:'DELETE'});
+  const d = await r.json();
+  if(d.success) { msg('Deleted'); loadUsers(); }
+  else msg('Failed', false);
+}
+
+async function addCredits() {
+  const body = {email: get('cred-email'), credits: parseInt(get('cred-amount')), plan_id: 'pro'};
+  if(!body.email) return msg('Email required', false);
+  const r = await fetch(API + '/user/credits/add', {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify(body)});
+  const d = await r.json();
+  if(d.success) { msg('Added '+body.credits+' credits!'); loadUsers(); }
+  else msg(d.detail?.message || 'Failed', false);
+}
+
+async function loadServices() {
+  const div = document.getElementById('services-status');
+  try {
+    const h = await (await fetch(API + '/health')).json();
+    div.innerHTML = `<span class="status">✅ Backend (8155)</span> — ${h.data?.status||'ok'}`;
+  } catch(e) { div.innerHTML = `<span class="status" style="color:#f87171">❌ Backend unreachable</span>`; }
+}
+
+function get(id) { return document.getElementById(id).value; }
+
+loadUsers(); loadPlans(); loadServices();
+setInterval(loadUsers, 10000);
+</script>
+</body></html>

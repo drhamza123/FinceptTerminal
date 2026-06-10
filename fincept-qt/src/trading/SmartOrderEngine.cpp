@@ -1,11 +1,13 @@
 #include "SmartOrderEngine.h"
 #include "trading/OrderSerializer.h"
+#include "core/config/AppConfig.h"
 #include <QJsonArray>
 #include <QJsonObject>
 #include <QJsonDocument>
 #include <QAbstractSocket>
 #include <QDebug>
 #include <QDateTime>
+#include <QUrl>
 #include "trading/BrokerInterface.h"
 #include <zmq.hpp>
 #include <thread>
@@ -59,11 +61,19 @@ void SmartOrderEngine::connectToGateway(const QString& url) {
         socket_->deleteLater();
         socket_ = nullptr;
     }
+    QString targetUrl = url;
+    if (targetUrl.isEmpty()) {
+        QUrl base(fincept::AppConfig::instance().api_base_url());
+        base.setScheme(base.scheme().toLower() == "https" ? "wss" : "ws");
+        if (base.port() == 8155) base.setPort(8156);
+        base.setPath("/ws/orders");
+        targetUrl = base.toString();
+    }
     socket_ = new QWebSocket(QString(), QWebSocketProtocol::VersionLatest, this);
     connect(socket_, &QWebSocket::connected, this, &SmartOrderEngine::onConnected);
     connect(socket_, &QWebSocket::disconnected, this, &SmartOrderEngine::onDisconnected);
     connect(socket_, &QWebSocket::binaryMessageReceived, this, &SmartOrderEngine::onBinaryMessage);
-    socket_->open(url);
+    socket_->open(targetUrl);
 }
 
 void SmartOrderEngine::disconnectFromGateway() {

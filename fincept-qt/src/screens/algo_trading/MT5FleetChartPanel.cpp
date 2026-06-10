@@ -57,7 +57,9 @@ namespace fincept::screens {
 static const int MAX_POINTS = 200;
 
 static QString mt5_ws_url(const QString& path) {
-    QUrl url(fincept::AppConfig::instance().api_base_url());
+    QString base = fincept::AppConfig::instance().api_base_url();
+    if (base.contains(":8155")) base.replace(":8155", ":8156");
+    QUrl url(base);
     url.setScheme(url.scheme().compare(QStringLiteral("https"), Qt::CaseInsensitive) == 0
         ? QStringLiteral("wss")
         : QStringLiteral("ws"));

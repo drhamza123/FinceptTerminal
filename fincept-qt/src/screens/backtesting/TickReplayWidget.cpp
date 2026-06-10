@@ -1,4 +1,5 @@
 #include "screens/backtesting/TickReplayWidget.h"
+#include "core/config/AppConfig.h"
 #include "ui/theme/Theme.h"
 #include <QJsonDocument>
 #include <QJsonObject>
@@ -43,7 +44,13 @@ void TickReplayWidget::build_ui() {
     connect(connect_btn_, &QPushButton::clicked, this, [this]() {
         if (connected_) { ws_->close(); return; }
         status_label_->setText("Connecting...");
-        ws_->open(QUrl("ws://localhost:8150/backtest/ws/tick-replay"));
+        {
+    QUrl url(fincept::AppConfig::instance().api_base_url());
+    url.setScheme(QStringLiteral("ws"));
+    if (url.port() == 8155) url.setPort(8156);
+    url.setPath(QStringLiteral("/backtest/ws/tick-replay"));
+    ws_->open(url);
+}
     });
     hl->addWidget(connect_btn_);
     start_btn_ = new QPushButton("Start Replay", this); start_btn_->setObjectName("chartToolBtn");

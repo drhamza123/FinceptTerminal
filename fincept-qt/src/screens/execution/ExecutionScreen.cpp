@@ -8,6 +8,9 @@
 #include "screens/crypto_trading/CryptoTickerBar.h"
 #include "screens/crypto_trading/CryptoWatchlist.h"
 #include "screens/algo_trading/MT5FleetChartPanel.h"
+#include "screens/algo_trading/MT5FleetMultiChartContainer.h"
+#include "screens/backtesting/TickReplayWidget.h"
+#include "screens/fno/ChainSubTab.h"
 #include "screens/crypto_center/CryptoCenterScreen.h"
 #include "screens/crypto_center/HoldingsBar.h"
 #include "screens/crypto_center/WalletActionConfirmDialog.h"
@@ -29,6 +32,10 @@
 #include "ui/theme/Theme.h"
 
 #include <QCompleter>
+#include <QCoreApplication>
+#include <QFile>
+#include <QProcess>
+#include <QTcpSocket>
 #include <QDateTime>
 #include <QFormLayout>
 #include <QHBoxLayout>
@@ -57,7 +64,9 @@ static const QString TAG = "ExecutionScreen";
 
 namespace {
 QString execution_ws_url(const QString& path, const QUrlQuery& query = {}) {
-    QUrl url(fincept::AppConfig::instance().api_base_url());
+    QString base = fincept::AppConfig::instance().api_base_url();
+    if (base.contains(":8155")) base.replace(":8155", ":8156");
+    QUrl url(base);
     url.setScheme(url.scheme().compare(QStringLiteral("https"), Qt::CaseInsensitive) == 0
         ? QStringLiteral("wss") : QStringLiteral("ws"));
     url.setPath(path);
@@ -265,6 +274,34 @@ void ExecutionScreen::setup_ui() {
         auto* chart_layout = new QVBoxLayout(chart_container_);
         chart_layout->setContentsMargins(0,0,0,0);
         chart_layout->setSpacing(0);
+        // ── Chart header bar with Multi-Chart / Replay / Options toggles ──
+        auto* chart_header = new QWidget;
+        chart_header->setObjectName("cryptoChartHeader");
+        auto* hdr_layout = new QHBoxLayout(chart_header);
+        hdr_layout->setContentsMargins(10, 4, 10, 4);
+        hdr_layout->setSpacing(2);
+
+        multi_chart_btn_ = new QPushButton("M-CHART");
+        multi_chart_btn_->setObjectName("cryptoTfBtn");
+        multi_chart_btn_->setCursor(Qt::PointingHandCursor);
+        connect(multi_chart_btn_, &QPushButton::clicked, this, &ExecutionScreen::toggle_multi_chart);
+        hdr_layout->addWidget(multi_chart_btn_);
+
+        replay_btn_ = new QPushButton("REPLAY");
+        replay_btn_->setObjectName("cryptoTfBtn");
+        replay_btn_->setCursor(Qt::PointingHandCursor);
+        connect(replay_btn_, &QPushButton::clicked, this, &ExecutionScreen::toggle_replay);
+        hdr_layout->addWidget(replay_btn_);
+
+        options_btn_ = new QPushButton("OPTIONS");
+        options_btn_->setObjectName("cryptoTfBtn");
+        options_btn_->setCursor(Qt::PointingHandCursor);
+        connect(options_btn_, &QPushButton::clicked, this, &ExecutionScreen::toggle_options);
+        hdr_layout->addWidget(options_btn_);
+
+        hdr_layout->addStretch();
+        chart_layout->addWidget(chart_header);
+
         crypto_chart_ = new CryptoChart;
         crypto_chart_->hide();
         chart_layout->addWidget(crypto_chart_);
@@ -896,9 +933,49 @@ void ExecutionScreen::on_order_submitted(const QString& side, const QString& ord
         if (is_paper_mode_) { ws_status_->setText("Paper mode: order simulated"); return; }
         if (!mt5_connected_) { ws_status_->setText("MT5 not linked"); refresh_mt5_link(); return; }
         const QString sym = symbol_input_->text().trimmed().toUpper();
-        auto* engine = new SmartOrderEngine(this);
-        engine->connectToGateway(execution_ws_url("/ws/orders"));
-        if (!engine->submitOrder(sym, side, qty, sl, tp)) ws_status_->setText("Order queue full");
+        int magic = 831846;
+        double volume = qty;
+        QJsonObject body;
+        body["action"] = "market";
+        body["symbol"] = sym;
+        body["side"] = side;
+        body["volume"] = volume;
+        body["magic"] = magic;
+        if (sl > 0) body["sl"] = sl;
+        if (tp > 0) body["tp"] = tp;
+        ws_status_->setText("Submitting MT5 order...");
+
+        // Try local MT5 worker first (127.0.0.1:5570), fall back to VPS
+        QTcpSocket* local_check = new QTcpSocket(this);
+        local_check->connectToHost("127.0.0.1", 5570);
+        if (local_check->waitForConnected(500)) {
+            QByteArray order_data = QJsonDocument(body).toJson(QJsonDocument::Compact);
+            order_data.append('\n');
+            local_check->write(order_data);
+            local_check->waitForBytesWritten(500);
+            local_check->waitForReadyRead(5000);
+            QByteArray resp = local_check->readAll();
+            local_check->disconnectFromHost();
+            local_check->deleteLater();
+            QJsonDocument doc = QJsonDocument::fromJson(resp);
+            if (!doc.isNull()) {
+                auto obj = doc.object();
+                int rc = obj["retcode"].toInt();
+                if (rc == 10009) { ws_status_->setText("FILLED (local)"); }
+                else { ws_status_->setText("Order: " + obj["comment"].toString()); }
+                return;
+            }
+        } else {
+            local_check->deleteLater();
+        }
+        // Fallback to VPS
+        HttpClient::instance().post("/mt5/worker/order", body, [this, sym](Result<QJsonDocument> r) {
+            if (!r.is_ok()) { ws_status_->setText("Order failed: " + QString::fromStdString(r.error())); return; }
+            auto obj = r.value().object();
+            int rc = obj["data"].toObject()["retcode"].toInt();
+            if (rc == 10009) { ws_status_->setText("FILLED (VPS)"); }
+            else { ws_status_->setText("Order: " + obj["data"].toObject()["comment"].toString()); }
+        });
         return;
     }
 
@@ -962,22 +1039,84 @@ void ExecutionScreen::on_symbol_submit() {
 
 void ExecutionScreen::on_mt5_creds_clicked() {
     auto* dlg = new QDialog(this);
-    dlg->setWindowTitle("MT5 Credentials"); dlg->setMinimumWidth(350);
+    dlg->setWindowTitle("MT5 Credentials"); dlg->setMinimumWidth(400);
     auto* form = new QFormLayout(dlg);
     auto* login_ed = new QLineEdit(dlg); login_ed->setPlaceholderText("e.g. 831846");
     auto* pass_ed = new QLineEdit(dlg); pass_ed->setEchoMode(QLineEdit::Password); pass_ed->setPlaceholderText("Trading password");
     auto* server_ed = new QLineEdit(dlg); server_ed->setPlaceholderText("e.g. DooTechnology-Demo");
     form->addRow("Login:", login_ed); form->addRow("Password:", pass_ed); form->addRow("Server:", server_ed);
+    auto* info_lbl = new QLabel("Local worker will start automatically");
+    info_lbl->setStyleSheet("color: #808080; font-size: 10px; font-style: italic;");
+    form->addRow(info_lbl);
     auto* btn_row = new QHBoxLayout;
-    auto* save_btn = new QPushButton("Save & Reconnect", dlg); auto* cancel_btn = new QPushButton("Cancel", dlg);
+    auto* save_btn = new QPushButton("Save & Connect", dlg); auto* cancel_btn = new QPushButton("Cancel", dlg);
     btn_row->addWidget(save_btn); btn_row->addWidget(cancel_btn); form->addRow(btn_row);
     connect(cancel_btn, &QPushButton::clicked, dlg, &QDialog::reject);
     connect(save_btn, &QPushButton::clicked, dlg, [this, dlg, login_ed, pass_ed, server_ed]() {
-        QJsonObject body; body["login"] = login_ed->text().trimmed(); body["password"] = pass_ed->text(); body["server"] = server_ed->text().trimmed();
-        HttpClient::instance().post("/mt5/configure", body, [this, dlg](Result<QJsonDocument> r) {
-            if (r.is_ok()) { QMessageBox::information(dlg, "Success", "MT5 credentials saved."); dlg->accept(); }
-            else { QMessageBox::warning(dlg, "Error", "Failed: " + QString::fromStdString(r.error())); }
-        }, this);
+        QString login = login_ed->text().trimmed();
+        QString password = pass_ed->text();
+        QString server = server_ed->text().trimmed();
+        if (login.isEmpty()) { QMessageBox::warning(dlg, "Error", "Login required"); return; }
+        ws_status_->setText("Setting up MT5 worker...");
+
+        // Kill any existing worker process
+        for (auto* p : findChildren<QProcess*>()) { if (p->objectName() == "mt5_worker") { p->kill(); p->deleteLater(); } }
+
+        // Find bundled executables in app directory
+        QString app_dir = QCoreApplication::applicationDirPath();
+        QString worker_exe = app_dir + "/mt5_worker.exe";
+        QString local_exe = app_dir + "/local_server.exe";
+
+        if (!QFile::exists(worker_exe) || !QFile::exists(local_exe)) {
+            // Fallback to VPS
+            QJsonObject body; body["login"] = login; body["password"] = password; body["server"] = server;
+            HttpClient::instance().post("/mt5/configure", body, [this, dlg](Result<QJsonDocument> r) {
+                if (r.is_ok()) { ws_status_->setText("MT5 configured (VPS)"); mt5_connected_ = true;
+                    QMessageBox::information(dlg, "Success", "MT5 configured on VPS"); dlg->accept(); }
+                else { ws_status_->setText("Failed: " + QString::fromStdString(r.error())); }
+            }, this);
+            return;
+        }
+
+        // Launch local server (proxies market data + proxies to VPS for login/AI)
+        ws_status_->setText("Starting local server...");
+        auto* local_proc = new QProcess(this);
+        local_proc->setObjectName("local_server");
+        local_proc->start(local_exe, {"8157"});
+
+        // Launch MT5 worker
+        ws_status_->setText("Starting MT5 worker...");
+        auto* proc = new QProcess(this);
+        proc->setObjectName("mt5_worker");
+        proc->start(worker_exe);
+        if (proc->waitForStarted(5000)) {
+            QTimer::singleShot(3000, this, [this, login, password, server, dlg]() {
+                QTcpSocket sock;
+                sock.connectToHost("127.0.0.1", 5570);
+                if (sock.waitForConnected(2000)) {
+                    QJsonObject cmd;
+                    cmd["action"] = "connect";
+                    cmd["login"] = login; cmd["password"] = password; cmd["server"] = server;
+                    sock.write(QJsonDocument(cmd).toJson(QJsonDocument::Compact) + "\n");
+                    sock.waitForBytesWritten(1000);
+                    sock.waitForReadyRead(3000);
+                    auto resp = sock.readAll();
+                    sock.disconnectFromHost();
+                    bool ok = resp.contains("ok");
+                    ws_status_->setText(ok ? "MT5 Connected!" : "MT5: " + resp.left(50));
+                    mt5_connected_ = ok;
+                    if (ok) QMessageBox::information(dlg, "Success", "MT5 connected! Trading locally.");
+                    else QMessageBox::warning(dlg, "Error", "Worker started but connection failed: " + resp.left(80));
+                } else {
+                    ws_status_->setText("Worker not reachable on port 5570");
+                    QMessageBox::warning(dlg, "Timeout", "Worker started but not responding on port 5570.");
+                }
+            });
+            dlg->accept();
+        } else {
+            ws_status_->setText("Worker failed to start");
+            QMessageBox::warning(dlg, "Error", "Could not start MT5 worker process.");
+        }
     });
     dlg->exec(); dlg->deleteLater();
 }
@@ -1402,6 +1541,49 @@ void ExecutionScreen::restore_state(const QVariantMap& state) {
         on_exchange_changed(exch); return;
     }
     if (sym_changed) on_symbol_selected(sym);
+}
+
+// ══════════════════════════════════════════════════════════════════════════════
+// Multi-Chart / Bar Replay / Options Chain Toggles
+// ══════════════════════════════════════════════════════════════════════════════
+
+void ExecutionScreen::toggle_multi_chart() {
+    auto* cl = qobject_cast<QVBoxLayout*>(chart_container_->layout());
+    if (!cl) return;
+    if (!multi_chart_widget_) {
+        multi_chart_widget_ = new MT5FleetMultiChartContainer(chart_container_);
+        int idx = cl->indexOf(crypto_chart_);
+        if (idx >= 0) cl->insertWidget(idx, multi_chart_widget_);
+    } else {
+        multi_chart_widget_->deleteLater();
+        multi_chart_widget_ = nullptr;
+    }
+}
+
+void ExecutionScreen::toggle_replay() {
+    auto* cl = qobject_cast<QVBoxLayout*>(chart_container_->layout());
+    if (!cl) return;
+    if (!replay_widget_) {
+        replay_widget_ = new TickReplayWidget(chart_container_);
+        int idx = cl->indexOf(crypto_chart_);
+        if (idx >= 0) cl->insertWidget(idx, replay_widget_);
+    } else {
+        replay_widget_->deleteLater();
+        replay_widget_ = nullptr;
+    }
+}
+
+void ExecutionScreen::toggle_options() {
+    auto* cl = qobject_cast<QVBoxLayout*>(chart_container_->layout());
+    if (!cl) return;
+    if (!options_widget_) {
+        options_widget_ = new fno::ChainSubTab(chart_container_);
+        int idx = cl->indexOf(crypto_chart_);
+        if (idx >= 0) cl->insertWidget(idx, options_widget_);
+    } else {
+        options_widget_->deleteLater();
+        options_widget_ = nullptr;
+    }
 }
 
 } // namespace fincept::screens

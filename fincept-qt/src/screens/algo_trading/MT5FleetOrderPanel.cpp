@@ -244,7 +244,7 @@ void MT5FleetOrderPanel::place_order(const QString& side) {
 
     QString endpoint;
     if (type == "Market") {
-        endpoint = "/mt5/order/market";
+        endpoint = "/mt5/worker/order";
         if (sl_spin_->value() > 0) payload["sl"] = sl_spin_->value();
         if (tp_spin_->value() > 0) payload["tp"] = tp_spin_->value();
     } else if (type == "Buy Limit" || type == "Sell Limit") {

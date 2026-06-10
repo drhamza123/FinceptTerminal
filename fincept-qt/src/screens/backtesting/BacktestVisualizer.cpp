@@ -1,4 +1,5 @@
 #include "screens/backtesting/BacktestVisualizer.h"
+#include "core/config/AppConfig.h"
 #include "ui/theme/Theme.h"
 #include <QJsonObject>
 #include <QJsonArray>
@@ -99,7 +100,13 @@ void BacktestVisualizer::startBacktest(const QString& symbols, const QString& da
     buffer_.clear();
     has_data_ = false;
 
-    ws_->open(QUrl("ws://localhost:8150/backtest/ws/tick-replay"));
+    {
+        QUrl url(fincept::AppConfig::instance().api_base_url());
+        url.setScheme(QStringLiteral("ws"));
+        if (url.port() == 8155) url.setPort(8156);
+        url.setPath(QStringLiteral("/backtest/ws/tick-replay"));
+        ws_->open(url);
+    }
 }
 
 void BacktestVisualizer::stopBacktest() {

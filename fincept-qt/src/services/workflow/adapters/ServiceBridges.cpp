@@ -223,7 +223,7 @@ void wire_trading_bridges(NodeRegistry& registry) {
                 body["symbol"] = symbol;
                 body["side"] = side.toUpper();
                 body["volume"] = qty;
-                HttpClient::instance().post("/mt5/order/market", body, [cb, symbol, side, qty](Result<QJsonDocument> result) {
+                HttpClient::instance().post("/mt5/worker/order", body, [cb, symbol, side, qty](Result<QJsonDocument> result) {
                     if (result.is_err()) {
                         cb(false, {}, QString::fromStdString(result.error()));
                         return;

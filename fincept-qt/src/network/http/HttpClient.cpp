@@ -2,6 +2,7 @@
 
 #include "core/logging/Logger.h"
 
+#include <QNetworkProxy>
 #include <QUrl>
 
 namespace fincept {
@@ -13,6 +14,7 @@ HttpClient& HttpClient::instance() {
 
 HttpClient::HttpClient() {
     nam_ = new QNetworkAccessManager(this);
+    nam_->setProxy(QNetworkProxy::NoProxy); // Bypass system proxy for local/VPS connections
 }
 
 QNetworkRequest HttpClient::build_request(const QString& url) const {
@@ -55,23 +57,25 @@ void HttpClient::handle_reply(QNetworkReply* reply, JsonCallback callback, const
 
         if (reply->error() != QNetworkReply::NoError) {
             QUrl sanitized = reply->url();
-            sanitized.setQuery(QString{}); // strip query to keep tokens out of logs
+            sanitized.setQuery(QString{});
+            QString err_detail = reply->errorString();
             LOG_WARN("HTTP",
-                     QString("HTTP %1: %2 — %3").arg(status).arg(sanitized.toString()).arg(reply->errorString()));
+                     QString("HTTP %1: %2 — %3").arg(status).arg(sanitized.toString()).arg(err_detail));
 
-            // 401/403 must always be err() — session-expiry detection in AuthApi/SessionGuard depends on it.
             if (status == 401 || status == 403) {
                 cb(Result<QJsonDocument>::err(QString("HTTP_%1").arg(status).toStdString()));
                 return;
             }
 
-            // Pass through parseable JSON bodies so AuthApi can extract server error messages.
             if (!data.isEmpty() && parse_err.error == QJsonParseError::NoError && doc.isObject()) {
                 cb(Result<QJsonDocument>::ok(doc));
                 return;
             }
 
-            cb(Result<QJsonDocument>::err(QString("HTTP_%1").arg(status).toStdString()));
+            QString err_msg = status > 0
+                ? QString("HTTP_%1").arg(status)
+                : QString("Connection failed: %1").arg(err_detail);
+            cb(Result<QJsonDocument>::err(err_msg.toStdString()));
             return;
         }
 

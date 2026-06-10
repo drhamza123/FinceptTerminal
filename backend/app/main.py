@@ -18,8 +18,9 @@ try:
 except Exception as e:
     logger.warning(f"Database init failed: {e}")
 
-from app.routers import auth, health, llm, news, macro, market, billing, chat, forum, support, marine, quantlib, agent, news_ws, geopolitics, mt5_bridge, backtest, freelance, vps, community, execution, alert_router
+from app.routers import auth, health, llm, news, macro, market, billing, chat, forum, support, marine, quantlib, agent, news_ws, geopolitics, mt5_bridge, backtest, freelance, vps, community, execution, alert_router, fix_router
 from app.routers.trade_server_router import router as trade_server_router
+from app.routers.worker_router import router as worker_router
 from app.services.alert_engine import alert_engine
 from app.services.mt5_trade_bridge import price_bridge
 
@@ -59,6 +60,8 @@ app.include_router(community.router)
 app.include_router(execution.router)
 app.include_router(alert_router.router)
 app.include_router(trade_server_router)
+app.include_router(fix_router.router)
+app.include_router(worker_router)
 
 # Start alert engine on import
 try:

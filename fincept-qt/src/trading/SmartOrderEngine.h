@@ -36,7 +36,7 @@ class SmartOrderEngine : public QObject {
     // Low-latency path (WS binary)
     bool submitOrder(const QString& symbol, const QString& side,
                      double volume, double sl = 0, double tp = 0);
-    void connectToGateway(const QString& url = "ws://localhost:8150/ws/orders");
+    void connectToGateway(const QString& url = {});
     void disconnectFromGateway();
 
     // Legacy broker path (for UnifiedTrading compatibility)

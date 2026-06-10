@@ -15,7 +15,9 @@ using namespace fincept::ui::colors;
 
 namespace {
 QString mt5_ws_url(const QString& path) {
-    QUrl url(fincept::AppConfig::instance().api_base_url());
+    QString base = fincept::AppConfig::instance().api_base_url();
+    if (base.contains(":8155")) base.replace(":8155", ":8156");
+    QUrl url(base);
     const QString scheme = url.scheme().toLower() == QStringLiteral("https") ? QStringLiteral("wss")
                                                                              : QStringLiteral("ws");
     url.setScheme(scheme);

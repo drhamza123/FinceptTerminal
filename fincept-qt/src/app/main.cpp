@@ -18,6 +18,7 @@
 #include "core/keys/KeyConfigManager.h"
 #include "core/logging/Logger.h"
 #include "core/session/ScreenStateManager.h"
+
 #include "core/session/SessionManager.h"
 #include "core/symbol/SymbolGroup.h"
 #include "core/symbol/SymbolRef.h"
@@ -147,28 +148,9 @@ int main(int argc, char* argv[]) {
     // it has to be set BEFORE QCoreApplication/QApplication is constructed —
     // setActiveBackend() after the fact does not always take effect because
     // singleton factories may already be bound.
+    // macOS: use system SecureTransport (more reliable, no Homebrew OpenSSL dependency)
+#ifndef Q_OS_MACOS
     qputenv("QT_TLS_BACKEND", "openssl");
-
-#ifdef Q_OS_MACOS
-    // Pre-load OpenSSL from Homebrew so the openssl plugin's runtime dlopen
-    // succeeds. Qt's QLibrary search defaults don't include /opt/homebrew/...
-    // Order matters: libcrypto first (libssl depends on it).
-    {
-        const QStringList crypto_candidates = {
-            QStringLiteral("/opt/homebrew/opt/openssl@3/lib/libcrypto.3.dylib"),
-            QStringLiteral("/usr/local/opt/openssl@3/lib/libcrypto.3.dylib"),
-        };
-        const QStringList ssl_candidates = {
-            QStringLiteral("/opt/homebrew/opt/openssl@3/lib/libssl.3.dylib"),
-            QStringLiteral("/usr/local/opt/openssl@3/lib/libssl.3.dylib"),
-        };
-        for (const auto& p : crypto_candidates) {
-            if (QFile::exists(p)) { QLibrary(p).load(); break; }
-        }
-        for (const auto& p : ssl_candidates) {
-            if (QFile::exists(p)) { QLibrary(p).load(); break; }
-        }
-    }
 #endif
 
     // ── Parse --profile <name> from argv before Qt initialises ───────────────
@@ -599,6 +581,11 @@ int main(int argc, char* argv[]) {
 
     // Initialize config
     auto& config = fincept::AppConfig::instance();
+    // Allow FINCEPT_API_URL env var to override (used by macos_bridge.py)
+    QByteArray env_url = qgetenv("FINCEPT_API_URL");
+    if (!env_url.isEmpty()) {
+        config.set("api/base_url", QString::fromUtf8(env_url));
+    }
     fincept::HttpClient::instance().set_base_url(config.api_base_url());
     // Note: auth tokens are managed by AuthManager::initialize() which loads
     // from SecureStorage (DPAPI) and SQLite — not from QSettings/Registry.
