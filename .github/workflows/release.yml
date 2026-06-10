@@ -35,16 +35,19 @@ jobs:
           submodules: recursive
           fetch-depth: 1
 
-      # ── OpenSSL dev libs ──────────────────────────────────────────────────
-      - name: Install OpenSSL
+      # ── OpenSSL + ZLIB dev libs ──────────────────────────────────────────
+      - name: Install OpenSSL & ZLIB
         shell: bash
         run: |
           set -euo pipefail
           VCPKG_ROOT="${VCPKG_INSTALLATION_ROOT:-C:/vcpkg}"
           "$VCPKG_ROOT/vcpkg" install openssl:x64-windows --no-print-usage
-          OPENSSL_DIR="$VCPKG_ROOT/installed/x64-windows"
-          echo "OPENSSL_ROOT_DIR=$OPENSSL_DIR" >> "$GITHUB_ENV"
-          ls "$OPENSSL_DIR/lib/libcrypto.lib" && echo "libcrypto.lib confirmed"
+          "$VCPKG_ROOT/vcpkg" install zlib:x64-windows --no-print-usage
+          VCPKG_DIR="$VCPKG_ROOT/installed/x64-windows"
+          echo "OPENSSL_ROOT_DIR=$VCPKG_DIR" >> "$GITHUB_ENV"
+          echo "ZLIB_ROOT=$VCPKG_DIR" >> "$GITHUB_ENV"
+          ls "$VCPKG_DIR/lib/libcrypto.lib" && echo "libcrypto.lib confirmed"
+          ls "$VCPKG_DIR/lib/zlib.lib" && echo "zlib.lib confirmed"
 
       # ── Qt ────────────────────────────────────────────────────────────────
       - name: Install Qt ${{ env.QT_VERSION }}
@@ -284,6 +287,7 @@ jobs:
           sudo apt-get install -y \
             cmake ninja-build gcc-12 g++-12 \
             libssl-dev \
+            libmsgpack-cxx-dev \
             libgl1-mesa-dev libglu1-mesa-dev \
             libxkbcommon-dev libxkbcommon-x11-0 \
             libxcb-cursor0 libxcb-cursor-dev \
@@ -638,7 +642,9 @@ jobs:
           max-size: 500M
 
       - name: Install build tools
-        run: brew install ninja cmake || brew upgrade ninja cmake || true
+        run: |
+          brew install ninja cmake || brew upgrade ninja cmake || true
+          brew install msgpack-cxx || brew upgrade msgpack-cxx || true
 
       # ── Qt ────────────────────────────────────────────────────────────────
       - name: Install Qt ${{ env.QT_VERSION }}
