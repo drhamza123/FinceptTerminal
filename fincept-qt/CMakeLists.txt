@@ -660,6 +660,9 @@ FetchContent_Declare(
     GIT_SHALLOW    TRUE
     UPDATE_DISCONNECTED TRUE
 )
+# qtads uses git describe --tags for versioning, which FAILS in a shallow
+# clone (no tags reachable). Pre-set ADS_VERSION so it skips git detection.
+set(ADS_VERSION "4.5.0" CACHE INTERNAL "QtADS version override (shallow clone compat)")
 FetchContent_MakeAvailable(QtADS)
 
 # ── Qt 6.8 compat: QDockWidget was removed, provide a stub for ADS ─────
