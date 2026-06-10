@@ -3496,7 +3496,7 @@ if(FINCEPT_BUILD_INSTALLER)
     set(CPACK_IFW_PACKAGE_TITLE "AI Stock Guardian")
     set(CPACK_IFW_PACKAGE_NAME "com.guardian.aistockguardian")
     set(CPACK_IFW_PACKAGE_PUBLISHER "Fincept Corporation")
-    set(CPACK_IFW_PACKAGE_START_MENU_DIRECTORY "Fincept")
+    set(CPACK_IFW_PACKAGE_START_MENU_DIRECTORY "AI Stock Guardian")
     set(CPACK_IFW_PACKAGE_ICON
         "${CMAKE_CURRENT_SOURCE_DIR}/resources/fincept.ico")
     set(CPACK_IFW_PACKAGE_MAINTENANCE_TOOL_NAME "FinceptMaintenanceTool")
