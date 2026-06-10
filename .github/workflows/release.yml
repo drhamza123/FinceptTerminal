@@ -17,7 +17,7 @@ env:
   QT_MODULES: "qtcharts qtwebsockets qtmultimedia"
   QT_IFW_VERSION: "4.7"
   QT_IFW_TOOL: "tools_ifw"
-  APP_NAME: FinceptTerminal
+  APP_NAME: AI_Stock_Guardian
   FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
 
 # ═════════════════════════════════════════════════════════════════════════════
@@ -224,13 +224,13 @@ jobs:
 
       # ── Upload ────────────────────────────────────────────────────────────
       # Narrow the glob to the installer output — the broader `*.exe` pattern
-      # would also catch the main FinceptTerminal.exe binary, which we don't
+      # would also catch the main AI_Stock_Guardian.exe binary, which we don't
       # want to publish as a release asset (users should run the installer).
       - name: Upload artifact
         uses: actions/upload-artifact@v4
         with:
-          name: FinceptTerminal-Windows-x64-installer
-          path: fincept-qt/build/FinceptTerminal-*-windows-x64-setup.exe
+          name: AI_Stock_Guardian-Windows-x64-installer
+          path: fincept-qt/build/AI_Stock_Guardian-*-windows-x64-setup.exe
           retention-days: 30
 
 # ═════════════════════════════════════════════════════════════════════════════
@@ -442,7 +442,7 @@ jobs:
           fi
 
           # Filename must match the regex in update-manifest:
-          #   FinceptTerminal-<version>-linux-x64-setup.run
+          #   AI_Stock_Guardian-<version>-linux-x64-setup.run
           # where <version> is CMAKE_PROJECT_VERSION (e.g. 4.0.3), NOT the
           # tag (v4.0.3). Parse project() VERSION from CMakeLists.txt so we
           # stay in sync even when triggered via workflow_dispatch (no tag).
@@ -458,8 +458,8 @@ jobs:
           # in addition to the core Qt libs. UPDATE_INFORMATION embeds the
           # zsync update URL so AppImageUpdate can fetch deltas later.
           export QMAKE="${QT_ROOT_DIR}/bin/qmake"
-          export OUTPUT="FinceptTerminal-${VERSION}-linux-x64-setup.run"
-          export UPDATE_INFORMATION="gh-releases-zsync|Fincept-Corporation|FinceptTerminal|latest|FinceptTerminal-*-linux-x64-setup.run.zsync"
+          export OUTPUT="AI_Stock_Guardian-${VERSION}-linux-x64-setup.run"
+          export UPDATE_INFORMATION="gh-releases-zsync|Fincept-Corporation|FinceptTerminal|latest|AI_Stock_Guardian-*-linux-x64-setup.run.zsync"
 
           ./linuxdeploy-x86_64.AppImage \
             --appdir "${APPDIR}" \
@@ -535,8 +535,8 @@ jobs:
           sed -i 's/^          //' "${DEB_ROOT}/DEBIAN/control"
 
           dpkg-deb --build --root-owner-group "${DEB_ROOT}"
-          mv "build/${DEB_NAME}.deb" "build/FinceptTerminal-${VERSION}-linux-x64.deb"
-          echo "Built: FinceptTerminal-${VERSION}-linux-x64.deb ($(du -sh "build/FinceptTerminal-${VERSION}-linux-x64.deb" | cut -f1))"
+          mv "build/${DEB_NAME}.deb" "build/AI_Stock_Guardian-${VERSION}-linux-x64.deb"
+          echo "Built: AI_Stock_Guardian-${VERSION}-linux-x64.deb ($(du -sh "build/AI_Stock_Guardian-${VERSION}-linux-x64.deb" | cut -f1))"
 
       # ── Build .rpm package ────────────────────────────────────────────────
       - name: Build .rpm package
@@ -585,23 +585,23 @@ jobs:
             --define "_rpmdir ${PWD}/build"
 
           mv build/x86_64/fincept-terminal-${VERSION}-1.x86_64.rpm \
-             "build/FinceptTerminal-${VERSION}-linux-x64.rpm" 2>/dev/null || \
+             "build/AI_Stock_Guardian-${VERSION}-linux-x64.rpm" 2>/dev/null || \
           mv build/*/fincept-terminal-*.rpm \
-             "build/FinceptTerminal-${VERSION}-linux-x64.rpm"
+             "build/AI_Stock_Guardian-${VERSION}-linux-x64.rpm"
 
-          echo "Built: FinceptTerminal-${VERSION}-linux-x64.rpm ($(du -sh "build/FinceptTerminal-${VERSION}-linux-x64.rpm" | cut -f1))"
+          echo "Built: AI_Stock_Guardian-${VERSION}-linux-x64.rpm ($(du -sh "build/AI_Stock_Guardian-${VERSION}-linux-x64.rpm" | cut -f1))"
 
       # ── Upload ────────────────────────────────────────────────────────────
       # Version-stamped filename so update-manifest regex picks it up.
       - name: Upload artifact
         uses: actions/upload-artifact@v4
         with:
-          name: FinceptTerminal-Linux-x64-installer
+          name: AI_Stock_Guardian-Linux-x64-installer
           path: |
-            fincept-qt/build/FinceptTerminal-*-linux-x64-setup.run
-            fincept-qt/build/FinceptTerminal-*-linux-x64-setup.run.zsync
-            fincept-qt/build/FinceptTerminal-*-linux-x64.deb
-            fincept-qt/build/FinceptTerminal-*-linux-x64.rpm
+            fincept-qt/build/AI_Stock_Guardian-*-linux-x64-setup.run
+            fincept-qt/build/AI_Stock_Guardian-*-linux-x64-setup.run.zsync
+            fincept-qt/build/AI_Stock_Guardian-*-linux-x64.deb
+            fincept-qt/build/AI_Stock_Guardian-*-linux-x64.rpm
           retention-days: 30
 
 # ═════════════════════════════════════════════════════════════════════════════
@@ -1465,10 +1465,10 @@ jobs:
         run: |
           set -euo pipefail
           # Parse project() VERSION so the DMG filename matches the regex in
-          # update-manifest: FinceptTerminal-<version>-macos-arm64-setup.dmg
+          # update-manifest: AI_Stock_Guardian-<version>-macos-arm64-setup.dmg
           VERSION=$(grep -Eo 'project\(FinceptTerminal VERSION [0-9]+\.[0-9]+\.[0-9]+' CMakeLists.txt | awk '{print $3}')
           [ -n "${VERSION}" ] || { echo "::error::Could not parse VERSION from CMakeLists.txt"; exit 1; }
-          DMG_NAME="FinceptTerminal-${VERSION}-macos-arm64-setup.dmg"
+          DMG_NAME="AI_Stock_Guardian-${VERSION}-macos-arm64-setup.dmg"
           echo "DMG target: ${DMG_NAME}"
 
           STAGING="$(mktemp -d)/dmg_staging"
@@ -1499,7 +1499,7 @@ jobs:
           NOTARY_PASSWORD: ${{ secrets.MACOS_NOTARY_PASSWORD }}
         run: |
           set -euo pipefail
-          DMG=$(ls build/FinceptTerminal-*-macos-arm64-setup.dmg | head -1)
+          DMG=$(ls build/AI_Stock_Guardian-*-macos-arm64-setup.dmg | head -1)
           echo "Signing DMG: ${DMG}"
           codesign --force --sign "$SIGNING_IDENTITY" --timestamp "$DMG"
 
@@ -1595,8 +1595,8 @@ jobs:
       - name: Upload artifact
         uses: actions/upload-artifact@v4
         with:
-          name: FinceptTerminal-macOS-arm64-installer
-          path: fincept-qt/build/FinceptTerminal-*-macos-arm64-setup.dmg
+          name: AI_Stock_Guardian-macOS-arm64-installer
+          path: fincept-qt/build/AI_Stock_Guardian-*-macos-arm64-setup.dmg
           retention-days: 30
 
 # ═════════════════════════════════════════════════════════════════════════════
@@ -1624,19 +1624,19 @@ jobs:
       - name: Download Windows installer
         uses: actions/download-artifact@v4
         with:
-          name: FinceptTerminal-Windows-x64-installer
+          name: AI_Stock_Guardian-Windows-x64-installer
           path: dist/windows
 
       - name: Download Linux installer
         uses: actions/download-artifact@v4
         with:
-          name: FinceptTerminal-Linux-x64-installer
+          name: AI_Stock_Guardian-Linux-x64-installer
           path: dist/linux
 
       - name: Download macOS installer
         uses: actions/download-artifact@v4
         with:
-          name: FinceptTerminal-macOS-arm64-installer
+          name: AI_Stock_Guardian-macOS-arm64-installer
           path: dist/macos
 
       - name: List release assets
@@ -1656,11 +1656,11 @@ jobs:
 
             | Platform | File | Install |
             |----------|------|---------|
-            | **Windows x64** | `FinceptTerminal-*-setup*.exe` | Run installer |
-            | **Linux (Debian/Ubuntu)** | `FinceptTerminal-*-linux-x64.deb` | `sudo dpkg -i *.deb` |
-            | **Linux (Fedora/RHEL)** | `FinceptTerminal-*-linux-x64.rpm` | `sudo dnf install *.rpm` |
-            | **Linux (portable)** | `FinceptTerminal-*-linux-x64-setup.run` | `chmod +x` then run |
-            | **macOS Apple Silicon** | `FinceptTerminal-*.dmg` or setup | Open DMG → drag to Applications |
+            | **Windows x64** | `AI_Stock_Guardian-*-setup*.exe` | Run installer |
+            | **Linux (Debian/Ubuntu)** | `AI_Stock_Guardian-*-linux-x64.deb` | `sudo dpkg -i *.deb` |
+            | **Linux (Fedora/RHEL)** | `AI_Stock_Guardian-*-linux-x64.rpm` | `sudo dnf install *.rpm` |
+            | **Linux (portable)** | `AI_Stock_Guardian-*-linux-x64-setup.run` | `chmod +x` then run |
+            | **macOS Apple Silicon** | `AI_Stock_Guardian-*.dmg` or setup | Open DMG → drag to Applications |
 
             ### Requirements
             - Windows 10/11 x64
@@ -1695,7 +1695,7 @@ jobs:
 #    match UpdateService::current_platform_key()
 #    (windows-x64 / windows-arm64 / linux-x64 / macos-arm64 / macos-x64).
 #    Asset filenames must match CPACK_PACKAGE_FILE_NAME in CMakeLists.txt:
-#    FinceptTerminal-<version>-<platform>-<arch>-setup.<ext>
+#    AI_Stock_Guardian-<version>-<platform>-<arch>-setup.<ext>
 # ═════════════════════════════════════════════════════════════════════════════
   update-repo-metadata:
     name: Update README + updates.json on main
@@ -1810,9 +1810,9 @@ jobs:
 
           | Platform | Download | Run |
           |----------|----------|-----|
-          | **Windows x64** | [FinceptTerminal-Windows-x64-setup.exe](${WIN_URL}) | Run installer → launch \`FinceptTerminal.exe\` |
-          | **Linux x64** | [FinceptTerminal-Linux-x64.run](${LIN_URL}) | \`chmod +x\` → run installer |
-          | **macOS Apple Silicon** | [FinceptTerminal-macOS-arm64.dmg](${MAC_URL}) | Open DMG → drag to Applications |
+          | **Windows x64** | [AI_Stock_Guardian-Windows-x64-setup.exe](${WIN_URL}) | Run installer → launch \`AI_Stock_Guardian.exe\` |
+          | **Linux x64** | [AI_Stock_Guardian-Linux-x64.run](${LIN_URL}) | \`chmod +x\` → run installer |
+          | **macOS Apple Silicon** | [AI_Stock_Guardian-macOS-arm64.dmg](${MAC_URL}) | Open DMG → drag to Applications |
           ${END_MARKER}"
 
           README="README.md"
@@ -1839,7 +1839,7 @@ jobs:
 
           WORK="$(mktemp -d)"
           echo "Downloading release assets to ${WORK}..."
-          gh release download "${TAG}" --dir "${WORK}" --pattern "FinceptTerminal-*setup*" || true
+          gh release download "${TAG}" --dir "${WORK}" --pattern "AI_Stock_Guardian-*setup*" || true
 
           # Export shell-side vars so the embedded python can read them via os.environ
           export WORK VERSION TAG REPO

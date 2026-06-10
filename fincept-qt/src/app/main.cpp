@@ -194,7 +194,7 @@ int main(int argc, char* argv[]) {
     // "AIStockGuardian --profile work" and "AIStockGuardian --profile personal"
     // run as two independent primaries.
     QApplication app(argc, argv);
-    app.setApplicationName("AIStockGuardian");
+    app.setApplicationName("AI Stock Guardian");
     app.setOrganizationName("Guardian");
 #ifndef FINCEPT_VERSION_STRING
 #    define FINCEPT_VERSION_STRING "0.0.0-dev"

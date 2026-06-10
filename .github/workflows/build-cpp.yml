@@ -20,8 +20,8 @@ jobs:
           - os: windows-2022
             arch: x64
             platform: Windows
-            artifact: FinceptTerminal-Windows-x64
-            exe: FinceptTerminal.exe
+            artifact: AI_Stock_Guardian-Windows-x64
+            exe: AI_Stock_Guardian.exe
             qt_arch: win64_msvc2022_64
             cmake_extra: ""
 
@@ -29,8 +29,8 @@ jobs:
           - os: windows-2022
             arch: arm64
             platform: Windows
-            artifact: FinceptTerminal-Windows-arm64
-            exe: FinceptTerminal.exe
+            artifact: AI_Stock_Guardian-Windows-arm64
+            exe: AI_Stock_Guardian.exe
             qt_arch: win64_msvc2022_arm64_cross_compiled
             cmake_extra: "-A ARM64"
 
@@ -38,7 +38,7 @@ jobs:
           - os: ubuntu-22.04
             arch: x64
             platform: Linux
-            artifact: FinceptTerminal-Linux-x64
+            artifact: AI_Stock_Guardian-Linux-x64
             exe: FinceptTerminal
             qt_arch: ""
             cmake_extra: ""
@@ -47,7 +47,7 @@ jobs:
           - os: macos-15
             arch: arm64
             platform: macOS
-            artifact: FinceptTerminal-macOS-arm64
+            artifact: AI_Stock_Guardian-macOS-arm64
             exe: FinceptTerminal
             qt_arch: clang_64
             cmake_extra: "-DCMAKE_OSX_ARCHITECTURES=arm64 -DCMAKE_OSX_DEPLOYMENT_TARGET=13.0"
@@ -58,7 +58,7 @@ jobs:
           - os: macos-15
             arch: x64
             platform: macOS
-            artifact: FinceptTerminal-macOS-x64
+            artifact: AI_Stock_Guardian-macOS-x64
             exe: FinceptTerminal
             qt_arch: clang_64
             cmake_extra: "-DCMAKE_OSX_ARCHITECTURES=x86_64 -DCMAKE_OSX_DEPLOYMENT_TARGET=13.0"
