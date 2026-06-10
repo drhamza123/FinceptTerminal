@@ -93,6 +93,7 @@ jobs:
           sudo apt-get install -y \
             cmake ninja-build gcc-12 g++-12 \
             libssl-dev \
+            libmsgpack-cxx-dev \
             libsecret-1-dev \
             qt6-base-dev qt6-base-private-dev \
             qt6-tools-dev qt6-tools-dev-tools \
@@ -108,10 +109,10 @@ jobs:
           echo "CC=gcc-12"  >> "$GITHUB_ENV"
           echo "CXX=g++-12" >> "$GITHUB_ENV"
 
-      # ---- OpenSSL dev libs (Windows) ----
+      # ---- OpenSSL + ZLIB dev libs (Windows) ----
       # windows-2022 runners ship only the "Light" OpenSSL (no .lib files).
       # vcpkg is pre-installed on every windows-2022 runner at C:\vcpkg.
-      - name: Install OpenSSL (Windows)
+      - name: Install OpenSSL & ZLIB (Windows)
         if: runner.os == 'Windows'
         shell: bash
         run: |
@@ -119,10 +120,13 @@ jobs:
           VCPKG_ROOT="${VCPKG_INSTALLATION_ROOT:-C:/vcpkg}"
           echo "Using vcpkg at: $VCPKG_ROOT"
           "$VCPKG_ROOT/vcpkg" install openssl:x64-windows --no-print-usage
-          OPENSSL_DIR="$VCPKG_ROOT/installed/x64-windows"
-          echo "OPENSSL_ROOT_DIR=$OPENSSL_DIR" >> "$GITHUB_ENV"
-          echo "OpenSSL installed at: $OPENSSL_DIR"
-          ls "$OPENSSL_DIR/lib/libcrypto.lib" && echo "libcrypto.lib confirmed"
+          "$VCPKG_ROOT/vcpkg" install zlib:x64-windows --no-print-usage
+          VCPKG_DIR="$VCPKG_ROOT/installed/x64-windows"
+          echo "OPENSSL_ROOT_DIR=$VCPKG_DIR" >> "$GITHUB_ENV"
+          echo "ZLIB_ROOT=$VCPKG_DIR" >> "$GITHUB_ENV"
+          echo "Deps installed at: $VCPKG_DIR"
+          ls "$VCPKG_DIR/lib/libcrypto.lib" && echo "libcrypto.lib confirmed"
+          ls "$VCPKG_DIR/lib/zlib.lib" && echo "zlib.lib confirmed"
 
       # ---- Qt6 target (Windows/macOS) ----
       - name: Install Qt6
@@ -152,6 +156,11 @@ jobs:
       - name: Install yt-dlp
         shell: bash
         run: pip install yt-dlp
+
+      # ---- msgpack-cxx (macOS) ----
+      - name: Install msgpack-cxx (macOS)
+        if: runner.os == 'macOS'
+        run: brew install msgpack-cxx || brew upgrade msgpack-cxx || true
 
       # ---- Configure CMake ----
       - name: Configure CMake (Linux)
