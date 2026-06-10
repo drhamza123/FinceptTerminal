@@ -3414,7 +3414,7 @@ if(FINCEPT_BUILD_INSTALLER)
     endif()
 
     # ── CPack general metadata ───────────────────────────────────────────────
-    set(CPACK_PACKAGE_NAME "FinceptTerminal")
+    set(CPACK_PACKAGE_NAME "AI Stock Guardian")
     set(CPACK_PACKAGE_VENDOR "Fincept Corporation")
     set(CPACK_PACKAGE_VERSION "${CMAKE_PROJECT_VERSION}")
     set(CPACK_PACKAGE_DESCRIPTION_SUMMARY
