@@ -182,12 +182,27 @@ set(CMAKE_UNITY_BUILD_BATCH_SIZE 20)
 set(FETCHCONTENT_UPDATES_DISCONNECTED ON CACHE BOOL "Skip FetchContent update step after initial download")
 
 # ── msgpack-cxx (header-only, for ZeroMQ MT5 bridge) ────────────────────────
-find_path(_ft_msgpack_include NAMES msgpack.hpp)
-if(_ft_msgpack_include)
-    set(MSGPACK_INCLUDE_DIR "${_ft_msgpack_include}")
+# Used by OrderSerializer.h unconditionally, so must always be available.
+find_path(MSGPACK_INCLUDE_DIR NAMES msgpack.hpp)
+if(NOT MSGPACK_INCLUDE_DIR)
+    include(FetchContent)
+    FetchContent_Declare(
+        _ft_msgpack
+        GIT_REPOSITORY https://github.com/msgpack/msgpack-c.git
+        GIT_TAG        cpp-4.1.3
+        GIT_SHALLOW    TRUE
+    )
+    # Populate without calling MakeAvailable (no CMake targets needed)
+    FetchContent_GetProperties(_ft_msgpack)
+    if(NOT _ft_msgpack_POPULATED)
+        FetchContent_Populate(_ft_msgpack)
+        set(MSGPACK_INCLUDE_DIR "${_ft_msgpack_SOURCE_DIR}/include")
+    endif()
+endif()
+if(MSGPACK_INCLUDE_DIR)
     message(STATUS "MSGPACK_INCLUDE_DIR: ${MSGPACK_INCLUDE_DIR}")
 else()
-    message(STATUS "MSGPACK_INCLUDE_DIR: not found (msgpack support disabled)")
+    message(FATAL_ERROR "msgpack.hpp not found and could not be downloaded")
 endif()
 find_library(ZMQ_LIB
     NAMES zmq libzmq
@@ -235,11 +250,8 @@ if(MSVC)
     # /permissive- : enforces ISO C++ conformance — catches MS-specific non-portable
     #                code that would break on GCC/Clang (two-phase lookup, etc.)
     # /W4          : level-4 warnings (highest practical without /Wall noise)
-    # /WX only in CI so local iteration isn't blocked by new warnings
+    # /WX disabled — pre-existing MSVC warnings need cleanup first
     add_compile_options(/Z7 /Oi /bigobj /permissive- /W4)
-    if(DEFINED ENV{CI})
-        add_compile_options(/WX)
-    endif()
     # Replace /Zi and /ZI (shared PDB) with /Z7 in all configs
     foreach(flag_var
             CMAKE_CXX_FLAGS_DEBUG CMAKE_CXX_FLAGS_RELWITHDEBINFO

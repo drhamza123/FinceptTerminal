@@ -1103,7 +1103,7 @@ void ExecutionScreen::on_mt5_creds_clicked() {
                     auto resp = sock.readAll();
                     sock.disconnectFromHost();
                     bool ok = resp.contains("ok");
-                    ws_status_->setText(ok ? "MT5 Connected!" : "MT5: " + resp.left(50));
+                    ws_status_->setText(ok ? QString("MT5 Connected!") : QString("MT5: ") + QString(resp.left(50)));
                     mt5_connected_ = ok;
                     if (ok) QMessageBox::information(dlg, "Success", "MT5 connected! Trading locally.");
                     else QMessageBox::warning(dlg, "Error", "Worker started but connection failed: " + resp.left(80));
