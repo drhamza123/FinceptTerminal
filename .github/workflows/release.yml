@@ -211,6 +211,19 @@ jobs:
           [ "$MISSING" -eq 1 ] && exit 1
           echo "=== $(find "${BUILD_DIR}" -type f | wc -l) files staged ==="
 
+      # ── Bundle Python scripts & workers ────────────────────────────────────
+      - name: Bundle MT5 worker & local server
+        shell: bash
+        working-directory: fincept-qt
+        run: |
+          set -euo pipefail
+          BUILD_DIR="build/Release"
+          # Copy Python scripts that the app launches at runtime
+          cp backend/app/services/mt5_worker.py "${BUILD_DIR}/" || true
+          cp backend/app/services/local_server.py "${BUILD_DIR}/" || true
+          cp backend/app/services/macos_bridge.py "${BUILD_DIR}/" || true
+          echo "Python scripts bundled"
+
       # ── Generate Installer ────────────────────────────────────────────────
       - name: Generate Installer (CPack IFW)
         shell: bash
