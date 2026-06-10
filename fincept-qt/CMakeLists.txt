@@ -181,8 +181,14 @@ set(CMAKE_UNITY_BUILD_BATCH_SIZE 20)
 # https://cmake.org/cmake/help/latest/module/FetchContent.html#variable:FETCHCONTENT_UPDATES_DISCONNECTED
 set(FETCHCONTENT_UPDATES_DISCONNECTED ON CACHE BOOL "Skip FetchContent update step after initial download")
 
-# ── ZeroMQ (ultra-low latency MT5 bridge) ──────────────────────────────────
-find_path(MSGPACK_INCLUDE_DIR msgpack.hpp)
+# ── msgpack-cxx (header-only, for ZeroMQ MT5 bridge) ────────────────────────
+find_path(_ft_msgpack_include NAMES msgpack.hpp)
+if(_ft_msgpack_include)
+    set(MSGPACK_INCLUDE_DIR "${_ft_msgpack_include}")
+    message(STATUS "MSGPACK_INCLUDE_DIR: ${MSGPACK_INCLUDE_DIR}")
+else()
+    message(STATUS "MSGPACK_INCLUDE_DIR: not found (msgpack support disabled)")
+endif()
 find_library(ZMQ_LIB
     NAMES zmq libzmq
     HINTS
@@ -650,11 +656,34 @@ set(QT_VERSION_MAJOR 6 CACHE STRING "" FORCE)
 FetchContent_Declare(
     QtADS
     GIT_REPOSITORY https://github.com/githubuser0xFFFF/Qt-Advanced-Docking-System.git
-    GIT_TAG        87cffe5d40307c61141c88b88c10c5e7d181d880  # 4.5.0
+    GIT_TAG        27f1bef064c0dd8fb454aebc3e37772f58e452b7  # master @ 2026-06-10
     GIT_SHALLOW    TRUE
     UPDATE_DISCONNECTED TRUE
 )
 FetchContent_MakeAvailable(QtADS)
+
+# ── Qt 6.8 compat: QDockWidget was removed, provide a stub for ADS ─────
+# Qt 6.8 removed QDockWidget. ADS references it in conditionally-compiled
+# code and MOC sees it regardless of platform. Patch FloatingDockContainer.h
+# to define QDockWidget as CDockWidget when the Qt header is unavailable.
+if(QtADS_POPULATED OR QtADS_SOURCE_DIR)
+    set(_qtads_src "${QtADS_SOURCE_DIR}")
+    if(NOT _qtads_src)
+        set(_qtads_src "${qtads_SOURCE_DIR}")
+    endif()
+    if(_qtads_src AND EXISTS "${_qtads_src}/src/FloatingDockContainer.h")
+        file(READ "${_qtads_src}/src/FloatingDockContainer.h" _fdh)
+        # Replace the QDockWidget conditional with an __has_include check.
+        # Qt ≥ 6.8 removed the QDockWidget header entirely.
+        string(REPLACE
+            "#if defined(Q_OS_UNIX) && !defined(Q_OS_MACOS)\n#include <QDockWidget>\n#define tFloatingWidgetBase QDockWidget\n#else\n#include <QWidget>\n#define tFloatingWidgetBase QWidget\n#endif"
+            "#if __has_include(<QDockWidget>)\n#include <QDockWidget>\n#define tFloatingWidgetBase QDockWidget\n#else\n#include <QWidget>\nclass QDockWidget : public QWidget {};\n#define tFloatingWidgetBase QDockWidget\n#endif"
+            _fdh "${_fdh}")
+        file(WRITE "${_qtads_src}/src/FloatingDockContainer.h" "${_fdh}")
+        message(STATUS "Patched QtADS FloatingDockContainer.h for Qt 6.8 compat")
+    endif()
+endif()
+
 # ADS target name is version-stamped: qtadvanceddocking-qt6
 # Disable unity build — ADS uses anonymous namespaces internally
 set_target_properties(qtadvanceddocking-qt6 PROPERTIES UNITY_BUILD OFF)
@@ -2983,8 +3012,10 @@ endif()
 target_include_directories(FinceptTerminal PRIVATE
     "${OPENSSL_INCLUDE_DIR}"
     "${md4c_SOURCE_DIR}/src"
-    ${MSGPACK_INCLUDE_DIR}
 )
+if(MSGPACK_INCLUDE_DIR)
+    target_include_directories(FinceptTerminal PRIVATE ${MSGPACK_INCLUDE_DIR})
+endif()
 if(ZMQ_LIB OR ZMQ_INCLUDE_DIR)
     target_include_directories(FinceptTerminal PRIVATE ${ZMQ_INCLUDE_DIR} ${ZMQ_C_INCLUDE_DIR})
 endif()
