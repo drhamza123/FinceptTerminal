@@ -43,9 +43,12 @@ jobs:
           VCPKG_ROOT="${VCPKG_INSTALLATION_ROOT:-C:/vcpkg}"
           "$VCPKG_ROOT/vcpkg" install openssl:x64-windows --no-print-usage
           "$VCPKG_ROOT/vcpkg" install zlib:x64-windows --no-print-usage
+          "$VCPKG_ROOT/vcpkg" install zeromq:x64-windows cppzmq:x64-windows --no-print-usage
           VCPKG_DIR="$VCPKG_ROOT/installed/x64-windows"
+          echo "VCPKG_DIR=$VCPKG_DIR" >> "$GITHUB_ENV"
           echo "OPENSSL_ROOT_DIR=$VCPKG_DIR" >> "$GITHUB_ENV"
           echo "ZLIB_ROOT=$VCPKG_DIR" >> "$GITHUB_ENV"
+          echo "ZMQ_ROOT=$VCPKG_DIR" >> "$GITHUB_ENV"
           ls "$VCPKG_DIR/lib/libcrypto.lib" && echo "libcrypto.lib confirmed"
           ls "$VCPKG_DIR/lib/zlib.lib" 2>/dev/null || ls "$VCPKG_DIR/lib/zlibstatic.lib" 2>/dev/null || echo "zlib installed (check skipped)"
 
@@ -82,7 +85,7 @@ jobs:
         run: |
           cmake -B build \
             -DCMAKE_BUILD_TYPE=${{ env.BUILD_TYPE }} \
-            -DCMAKE_PREFIX_PATH="${QT_ROOT_DIR}" \
+            -DCMAKE_PREFIX_PATH="${QT_ROOT_DIR};${VCPKG_DIR}" \
             -DOPENSSL_ROOT_DIR="${OPENSSL_ROOT_DIR}" \
             -DDEPLOY_QT=ON \
             -DFINCEPT_BUILD_INSTALLER=ON \

@@ -209,9 +209,21 @@ find_library(ZMQ_LIB
     HINTS
         "C:/Users/AHMADP~1/AppData/Local/Temp/opencode/libzmq/lib"
         "C:/Users/AHMADP~1/AppData/Local/Temp/opencode"
-        "C:/msys64/mingw64/lib")
-find_path(ZMQ_INCLUDE_DIR zmq.hpp HINTS "C:/Users/AHMADP~1/AppData/Local/Temp/opencode/cppzmq" "C:/msys64/mingw64/include")
-find_path(ZMQ_C_INCLUDE_DIR zmq.h HINTS "C:/Users/AHMADP~1/AppData/Local/Temp/opencode/libzmq/include" "C:/msys64/mingw64/include")
+        "C:/msys64/mingw64/lib"
+        "$ENV{VCPKG_DIR}/lib"
+        "${ZMQ_ROOT_DIR}/lib")
+find_path(ZMQ_INCLUDE_DIR zmq.hpp
+    HINTS
+        "C:/Users/AHMADP~1/AppData/Local/Temp/opencode/cppzmq"
+        "C:/msys64/mingw64/include"
+        "$ENV{VCPKG_DIR}/include"
+        "${ZMQ_ROOT_DIR}/include")
+find_path(ZMQ_C_INCLUDE_DIR zmq.h
+    HINTS
+        "C:/Users/AHMADP~1/AppData/Local/Temp/opencode/libzmq/include"
+        "C:/msys64/mingw64/include"
+        "$ENV{VCPKG_DIR}/include"
+        "${ZMQ_ROOT_DIR}/include")
 if(ZMQ_LIB)
     add_library(ZMQ::ZMQ UNKNOWN IMPORTED)
     set_target_properties(ZMQ::ZMQ PROPERTIES IMPORTED_LOCATION "${ZMQ_LIB}")
