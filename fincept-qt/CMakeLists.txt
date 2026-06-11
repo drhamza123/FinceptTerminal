@@ -1397,6 +1397,9 @@ set(UI_SOURCES
     src/ui/charts/ChartScreenshot.cpp
     src/ui/charts/ChartLayoutManager.cpp
     src/ui/charts/ChartOverlayManager.cpp
+    src/ui/charts/HotkeyManager.cpp
+    src/ui/charts/TimeAndSalesWidget.cpp
+    src/ui/charts/SymbolComparisonLayer.cpp
     src/ui/drawing/DrawingManager.cpp
     src/ui/drawing/DrawingTypes.cpp
     src/ui/charts/IndicatorPicker.cpp
