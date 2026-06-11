@@ -22,7 +22,8 @@ h1{font-size:28px;font-weight:700;margin-bottom:8px;color:#f59e0b;}
 <div class="card">
 <h1>AI Stock Guardian</h1>
 <p class="sub">Professional trading terminal — Windows x64</p>
-<a class="btn" href="/download/exe">Download Installer (44 MB)</a>
+<a class="btn" href="/download/zip">Download Portable (59 MB)</a><br><br>
+<a class="btn" href="/download/exe" style="background:#333;color:#e5e5e5;">Download Exe Only (44 MB)</a>
 <div class="info">Version 4.0.3 &bull; MSVC 2022 &bull; Qt 6.8.3</div>
 </div></body></html>"""
 
@@ -40,3 +41,10 @@ async def download_exe():
     if not os.path.exists(path):
         return HTMLResponse("<h1>File not found</h1>", status_code=404)
     return FileResponse(path, filename="AI_Stock_Guardian_Setup.exe", media_type="application/octet-stream")
+
+@router.get("/download/zip")
+async def download_zip():
+    path = r"C:\opt\fincept_terminal_source\fincept-qt\build\AI_Stock_Guardian.zip"
+    if not os.path.exists(path):
+        return HTMLResponse("<h1>ZIP not found</h1>", status_code=404)
+    return FileResponse(path, filename="AI_Stock_Guardian.zip", media_type="application/zip")
