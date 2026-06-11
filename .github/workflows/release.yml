@@ -96,14 +96,17 @@ jobs:
         working-directory: fincept-qt
         run: cmake --build build --config ${{ env.BUILD_TYPE }} --parallel 4
 
-      # ── Verify ───────────────────────────────────────────────────────────
+      # ── Verify + rename binary ──────────────────────────────────────────
       - name: Verify binary
         shell: bash
         working-directory: fincept-qt
         run: |
-          BINARY="build/Release/${{ env.APP_NAME }}.exe"
+          BINARY="build/Release/FinceptTerminal.exe"
           [ -f "$BINARY" ] || { echo "::error::Binary not found"; exit 1; }
           echo "Binary: $BINARY ($(du -sh "$BINARY" | cut -f1))"
+          # CMake target is FinceptTerminal but we deploy as AI_Stock_Guardian
+          cp "$BINARY" "build/Release/${{ env.APP_NAME }}.exe"
+          ls -la "build/Release/${{ env.APP_NAME }}.exe"
 
       # ── Deploy Qt DLLs ────────────────────────────────────────────────────
       # Mirrors the matrix build in build-cpp.yml — both must stage the SAME
