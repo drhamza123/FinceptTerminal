@@ -5,6 +5,8 @@
 #include "trading/TradingTypes.h"
 #include "ui/charts/ChartOverlayManager.h"
 #include "ui/charts/PositionLayer.h"
+#include "ui/charts/IndicatorPanel.h"
+#include "trading/IndicatorCalculator.h"
 
 #include <QPushButton>
 #include <QVector>
@@ -20,6 +22,7 @@ class QGraphicsRectItem;
 class QGraphicsEllipseItem;
 class QGraphicsSimpleTextItem;
 class QLabel;
+class QVBoxLayout;
 class QWheelEvent;
 
 namespace fincept::ui { class IndicatorPicker; }
@@ -55,6 +58,7 @@ class CryptoChart : public QWidget {
     fincept::ui::ChartOverlayManager* overlay_manager() const { return overlay_mgr_; }
     QChart* chart() const { return chart_; }
     QWidget* chartView() const { return chart_view_; }
+    void update_indicator_panels();
 
   signals:
     void timeframe_changed(const QString& tf);
@@ -131,6 +135,13 @@ class CryptoChart : public QWidget {
     fincept::ui::PositionLayer* position_layer_ = nullptr;
 
     friend class HoverChartView;
+
+    // Indicator sub-panels (RSI, MACD, Stochastic)
+    QVBoxLayout* indicator_panels_ = nullptr;
+    fincept::ui::IndicatorPanel* rsi_panel_ = nullptr;
+    fincept::ui::IndicatorPanel* macd_panel_ = nullptr;
+    fincept::ui::IndicatorPanel* stoch_panel_ = nullptr;
+    class VolumeProfileLayer* vol_profile_layer_ = nullptr;
 
     // Chart type mode (0=candlestick, 1=renko, 2=kagi, 3=pnf)
     int chart_mode_ = 0;

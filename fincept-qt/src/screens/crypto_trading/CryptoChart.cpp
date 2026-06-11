@@ -36,6 +36,7 @@
 #include "ui/charts/CandleData.h"
 #include "ui/charts/ChartOverlayManager.h"
 #include "ui/charts/IndicatorPicker.h"
+#include "ui/charts/IndicatorPanel.h"
 #include "ui/charts/layers/EmaLayer.h"
 #include "ui/charts/layers/VwapLayer.h"
 #include "ui/charts/layers/BollingerLayer.h"
@@ -292,8 +293,54 @@ CryptoChart::CryptoChart(QWidget* parent) : QWidget(parent) {
     draw_layout->addStretch();
     layout->addWidget(draw_toolbar_);
 
+    // Indicator panel buttons
+    auto* ind_btn = [&](const char* label, const char* tip) -> QPushButton* {
+        auto* btn = new QPushButton(label);
+        btn->setObjectName("cryptoTfBtn");
+        btn->setCursor(Qt::PointingHandCursor);
+        btn->setToolTip(tip);
+        btn->setCheckable(true);
+        btn->setFixedWidth(36);
+        h_layout->addWidget(btn);
+        return btn;
+    };
+    auto* rsi_btn = ind_btn("RSI", "Relative Strength Index");
+    auto* macd_btn = ind_btn("MACD", "Moving Average Convergence Divergence");
+    auto* stoch_btn = ind_btn("STOCH", "Stochastic Oscillator");
+    auto* vol_btn = ind_btn("VOL", "Volume Profile");
+
     h_layout->addStretch();
     layout->addWidget(header);
+
+    // Indicator sub-panels container (below chart)
+    indicator_panels_ = new QVBoxLayout();
+    indicator_panels_->setContentsMargins(0, 0, 0, 0);
+    indicator_panels_->setSpacing(1);
+    layout->addLayout(indicator_panels_);
+
+    rsi_panel_ = new fincept::ui::IndicatorPanel(fincept::ui::IndicatorPanel::RSI, 100);
+    rsi_panel_->setVisible(false);
+    indicator_panels_->addWidget(rsi_panel_);
+    connect(rsi_btn, &QPushButton::toggled, this, [this](bool on) {
+        rsi_panel_->setVisible(on);
+        if (on && !candles_.isEmpty()) update_indicator_panels();
+    });
+
+    macd_panel_ = new fincept::ui::IndicatorPanel(fincept::ui::IndicatorPanel::MACD, 120);
+    macd_panel_->setVisible(false);
+    indicator_panels_->addWidget(macd_panel_);
+    connect(macd_btn, &QPushButton::toggled, this, [this](bool on) {
+        macd_panel_->setVisible(on);
+        if (on && !candles_.isEmpty()) update_indicator_panels();
+    });
+
+    stoch_panel_ = new fincept::ui::IndicatorPanel(fincept::ui::IndicatorPanel::Stochastic, 100);
+    stoch_panel_->setVisible(false);
+    indicator_panels_->addWidget(stoch_panel_);
+    connect(stoch_btn, &QPushButton::toggled, this, [this](bool on) {
+        stoch_panel_->setVisible(on);
+        if (on && !candles_.isEmpty()) update_indicator_panels();
+    });
 
     // ── Chart proper ───────────────────────────────────────────────────────
     chart_ = new QChart;
@@ -452,6 +499,37 @@ CryptoChart::CryptoChart(QWidget* parent) : QWidget(parent) {
     });
 }
 
+void CryptoChart::update_indicator_panels() {
+    if (candles_.isEmpty()) return;
+
+    QVector<double> timestamps, closes, highs, lows, volumes;
+    for (const auto& c : candles_) {
+        timestamps.append(static_cast<double>(c.timestamp));
+        closes.append(c.close);
+        highs.append(c.high);
+        lows.append(c.low);
+        volumes.append(c.volume);
+    }
+
+    if (rsi_panel_ && rsi_panel_->isVisible()) {
+        auto rsi = fincept::trading::IndicatorCalculator::rsi(candles_);
+        QVector<double> rsi_vals(candles_.size(), 50);
+        for (int i = 0; i < rsi.values.size() && i < candles_.size(); ++i)
+            rsi_vals[i] = rsi.values[i];
+        rsi_panel_->set_data(timestamps, rsi_vals);
+    }
+
+    if (macd_panel_ && macd_panel_->isVisible()) {
+        auto macd = fincept::trading::IndicatorCalculator::macd(candles_);
+        macd_panel_->set_macd_data(timestamps, macd.macd, macd.signal, macd.histogram);
+    }
+
+    if (stoch_panel_ && stoch_panel_->isVisible()) {
+        auto stoch = fincept::trading::IndicatorCalculator::stochastic(candles_);
+        stoch_panel_->set_stoch_data(timestamps, stoch.k, stoch.d);
+    }
+}
+
 void CryptoChart::set_active_tf(int idx) {
     for (int i = 0; i < 31; ++i) {
         tf_buttons_[i]->setProperty("active", i == idx);
@@ -475,6 +553,7 @@ void CryptoChart::set_candles(const QVector<trading::Candle>& candles) {
     overlay_mgr_->set_candles(fincept::ui::CandleData::from_candles(candles_));
     apply_tf_axis_format();
     update_last_price_marker();
+    update_indicator_panels();
 
     if (!pending_tf_.isEmpty()) {
         const QString tf = pending_tf_;
@@ -550,6 +629,7 @@ void CryptoChart::append_candle(const trading::Candle& candle) {
 
     if (!candles_.isEmpty())
         overlay_mgr_->append_candle(fincept::ui::CandleData::from(candles_.last()));
+    update_indicator_panels();
 }
 
 void CryptoChart::recompute_bounds() {
@@ -623,6 +703,16 @@ void CryptoChart::update_axes(double min_price, double max_price, qint64 min_tim
     }
 
     overlay_mgr_->reposition_all();
+
+    // Sync indicator panel X-axes with main chart
+    if (min_time > 0 && max_time > 0) {
+        if (rsi_panel_ && rsi_panel_->isVisible())
+            rsi_panel_->update_x_range(min_time, effective_max);
+        if (macd_panel_ && macd_panel_->isVisible())
+            macd_panel_->update_x_range(min_time, effective_max);
+        if (stoch_panel_ && stoch_panel_->isVisible())
+            stoch_panel_->update_x_range(min_time, effective_max);
+    }
 }
 
 void CryptoChart::apply_tf_axis_format() {
