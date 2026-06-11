@@ -289,10 +289,7 @@ void MT5FleetChartPanel::build_ui() {
     hl->addWidget(data_tooltip_label_); hl->addSpacing(4);
     hl->addWidget(tool_label_); hl->addSpacing(4);
     hl->addStretch();
-    hl->addWidget(compare_combo_);
-    hl->addWidget(log_scale_check_);
-    hl->addWidget(chart_type_combo_);
-    hl->addWidget(chart_style_combo_); hl->addWidget(timeframe_combo_); hl->addWidget(indicator_combo_); hl->addWidget(refresh_btn_);
+    hl->addWidget(refresh_btn_);
     root->addWidget(header);
 
     // TradingView-style drawing toolbar. It is inserted into the chart area
