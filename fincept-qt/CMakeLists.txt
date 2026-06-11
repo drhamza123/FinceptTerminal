@@ -1078,6 +1078,7 @@ set(TRADING_SOURCES
     src/trading/ExchangeService.cpp
     src/trading/ExchangeSession.cpp
     src/trading/ExchangeSessionManager.cpp
+    src/trading/IndicatorCalculator.cpp
     src/trading/ExchangeDaemonPool.cpp
     # Native Kraken WebSocket v2 client
     src/trading/exchanges/kraken/KrakenSymbolMapper.cpp

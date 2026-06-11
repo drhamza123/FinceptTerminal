@@ -409,20 +409,16 @@ CryptoChart::CryptoChart(QWidget* parent) : QWidget(parent) {
     layout->addWidget(draw_toolbar_);
 
     // Indicator panel buttons
-    auto* ind_btn = [&](const char* label, const char* tip) -> QPushButton* {
-        auto* btn = new QPushButton(label);
-        btn->setObjectName("cryptoTfBtn");
-        btn->setCursor(Qt::PointingHandCursor);
-        btn->setToolTip(tip);
-        btn->setCheckable(true);
-        btn->setFixedWidth(36);
-        h_layout->addWidget(btn);
-        return btn;
+    auto mk_ind_btn = [&](const QString& label, const QString& tip) -> QPushButton* {
+        auto* b = new QPushButton(label);
+        b->setObjectName("cryptoTfBtn"); b->setCursor(Qt::PointingHandCursor);
+        b->setToolTip(tip); b->setCheckable(true); b->setFixedWidth(36);
+        h_layout->addWidget(b); return b;
     };
-    auto* rsi_btn = ind_btn("RSI", "Relative Strength Index");
-    auto* macd_btn = ind_btn("MACD", "Moving Average Convergence Divergence");
-    auto* stoch_btn = ind_btn("STOCH", "Stochastic Oscillator");
-    auto* vol_btn = ind_btn("VOL", "Volume Profile");
+    auto* rsi_btn = mk_ind_btn("RSI", "Relative Strength Index");
+    auto* macd_btn = mk_ind_btn("MACD", "Moving Average Convergence Divergence");
+    auto* stoch_btn = mk_ind_btn("STOCH", "Stochastic Oscillator");
+    auto* vol_btn = mk_ind_btn("VOL", "Volume Profile");
     more_indicators_btn_ = new QPushButton("+");
     more_indicators_btn_->setObjectName("cryptoTfBtn");
     more_indicators_btn_->setCursor(Qt::PointingHandCursor);
