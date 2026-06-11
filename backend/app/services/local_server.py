@@ -120,9 +120,9 @@ class LocalHandler(BaseHTTPRequestHandler):
             self.json({"success": True, "data": results, "errors": errors})
             return
 
-        if path == "/market/ohlc":
-            symbol = qs.get("symbol", ["AAPL"])[0]
-            tf = qs.get("timeframe", ["1d"])[0]
+        if path in ("/market/ohlc", "/mt5/market/ohlc"):
+            symbol = qs.get("symbol", ["EURUSD.s"])[0]
+            tf = qs.get("timeframe", ["1h"])[0]
             count = int(qs.get("count", [100])[0])
             # Try MT5 worker first
             try:

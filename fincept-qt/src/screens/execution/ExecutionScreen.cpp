@@ -207,6 +207,27 @@ void ExecutionScreen::setup_ui() {
     connect(creds_btn_, &QPushButton::clicked, this, [this]() { on_mt5_creds_clicked(); });
     cmd_layout->addWidget(creds_btn_);
 
+    // EA Deploy & Compile buttons
+    auto* ea_btn = new QPushButton("EA");
+    ea_btn->setStyleSheet("QPushButton{background:#111;color:#e5e5e5;border:1px solid #3a3a48;padding:2px 10px;font-weight:700;font-size:10px;border-radius:3px;}");
+    ea_btn->setFixedHeight(22);
+    ea_btn->setCursor(Qt::PointingHandCursor);
+    ea_btn->setToolTip("Deploy an Expert Advisor to MT5");
+    connect(ea_btn, &QPushButton::clicked, this, [this]() {
+        // TODO: Open AlgoDeployDialog for MT5 EA deployment
+    });
+    cmd_layout->addWidget(ea_btn);
+
+    auto* compile_btn = new QPushButton("COMPILE");
+    compile_btn->setStyleSheet("QPushButton{background:#111;color:#e5e5e5;border:1px solid #3a3a48;padding:2px 10px;font-weight:700;font-size:10px;border-radius:3px;}");
+    compile_btn->setFixedHeight(22);
+    compile_btn->setCursor(Qt::PointingHandCursor);
+    compile_btn->setToolTip("Compile and deploy MQL5 script to MT5");
+    connect(compile_btn, &QPushButton::clicked, this, [this]() {
+        // TODO: Open compile dialog for MT5 scripts
+    });
+    cmd_layout->addWidget(compile_btn);
+
     // API button
     api_btn_ = new QPushButton("API");
     api_btn_->setObjectName("cryptoApiBtn");
