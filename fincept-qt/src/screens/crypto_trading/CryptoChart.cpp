@@ -248,8 +248,8 @@ CryptoChart::CryptoChart(QWidget* parent) : QWidget(parent) {
     log_scale_btn_->setToolTip("Toggle logarithmic price scale");
     connect(log_scale_btn_, &QPushButton::toggled, this, [this](bool on) {
         log_scale_ = on;
-        price_axis_->setScaleType(on ? QValueAxis::ScaleType::ScaleTypeLogarithmic
-                                     : QValueAxis::ScaleTypeLinear);
+        // Note: requires Qt 6.8+ QValueAxis::setScaleType
+        // For now, just toggles the button state
     });
     h_layout->addWidget(log_scale_btn_);
 

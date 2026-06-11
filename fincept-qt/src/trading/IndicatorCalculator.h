@@ -291,27 +291,40 @@ struct IndicatorCalculator {
     }
 
     static AdxResult adx(const QVector<Candle>& candles, int period = 14) {
-        AdxResult r; int n = candles.size(); if (n < period*2) return r;
+        AdxResult r;
+        int n = candles.size();
+        if (n < period * 2) return r;
         r.adx.resize(n); r.plus_di.resize(n); r.minus_di.resize(n);
-        QVector<double> tr(n,0), pdm(n,0), mdm(n,0);
+        QVector<double> tr(n, 0), pdm(n, 0), mdm(n, 0);
         for (int i = 1; i < n; ++i) {
-            tr[i] = std::max({candles[i].high-candles[i].low, std::abs(candles[i].high-candles[i-1].close), std::abs(candles[i].low-candles[i-1].close)});
-            double up = candles[i].high-candles[i-1].high, dn = candles[i-1].low-candles[i].low;
-            pdm[i] = (up>dn&&up>0)?up:0; mdm[i] = (dn>up&&dn>0)?dn:0;
+            double hl = candles[i].high - candles[i].low;
+            double hc = std::abs(candles[i].high - candles[i - 1].close);
+            double lc = std::abs(candles[i].low - candles[i - 1].close);
+            tr[i] = std::max(hl, std::max(hc, lc));
+            double up = candles[i].high - candles[i - 1].high;
+            double dn = candles[i - 1].low - candles[i].low;
+            pdm[i] = (up > dn && up > 0) ? up : 0;
+            mdm[i] = (dn > up && dn > 0) ? dn : 0;
         }
-        QVector<double> sp(n,0), sm(n,0);
+        QVector<double> sp(n, 0), sm(n, 0);
         for (int i = period; i < n; ++i) {
             double at = 0, sp_sum = 0, sm_sum = 0;
-            for (int j = i-period+1; j <= i; ++j) { at+=tr[j]; sp_sum+=pdm[j]; sm_sum+=mdm[j]; }
-            sp[i] = 100*sp_sum/at; sm[i] = 100*sm_sum/at;
+            for (int j = i - period + 1; j <= i; ++j) {
+                at += tr[j]; sp_sum += pdm[j]; sm_sum += mdm[j];
+            }
+            sp[i] = 100.0 * sp_sum / (at == 0 ? 1 : at);
+            sm[i] = 100.0 * sm_sum / (at == 0 ? 1 : at);
         }
         for (int i = period; i < n; ++i) {
             double sum = 0;
-            for (int j = i-period+1; j <= i; ++j) {
-                double dx = 100*std::abs(sp[j]-sm[j])/(sp[j]+sm[j]==0?1:sp[j]+sm[j]);
+            for (int j = i - period + 1; j <= i; ++j) {
+                double di_sum = sp[j] + sm[j];
+                double dx = (di_sum == 0) ? 0 : 100.0 * std::abs(sp[j] - sm[j]) / di_sum;
                 sum += dx;
             }
-            r.adx[i] = sum/period; r.plus_di[i] = sp[i]; r.minus_di[i] = sm[i];
+            r.adx[i] = sum / period;
+            r.plus_di[i] = sp[i];
+            r.minus_di[i] = sm[i];
         }
         return r;
     }
