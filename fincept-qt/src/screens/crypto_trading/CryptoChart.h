@@ -7,6 +7,7 @@
 #include "ui/charts/PositionLayer.h"
 #include "ui/charts/IndicatorPanel.h"
 #include "ui/drawing/DrawingManager.h"
+#include "ui/charts/ChartLayoutManager.h"
 #include "trading/IndicatorCalculator.h"
 
 #include <QPushButton>
@@ -25,6 +26,8 @@ class QGraphicsSimpleTextItem;
 class QLabel;
 class QVBoxLayout;
 class QWheelEvent;
+namespace fincept::screens { class VolumeProfileLayer; }
+namespace fincept::ui { class ChartScreenshot; }
 
 namespace fincept::ui { class IndicatorPicker; }
 

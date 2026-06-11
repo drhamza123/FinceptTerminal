@@ -59,9 +59,9 @@ signals:
 private:
     int hit_test(const QPointF& view_pos) const;  // returns item index or -1
     enum DragTarget { None, EntryLine, SLLine, TPPLine };
-    DragTarget drag_target_ = None;
-    int drag_index_ = -1;
-    bool drag_active_ = false;
+    mutable DragTarget drag_target_ = None;
+    mutable int drag_index_ = -1;
+    mutable bool drag_active_ = false;
     double drag_start_y_ = 0;
     void rebuild_items();
     void clear_items();

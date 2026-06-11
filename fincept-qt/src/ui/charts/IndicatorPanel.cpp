@@ -4,6 +4,7 @@
 #include <QBarSet>
 #include <QChart>
 #include <QDateTimeAxis>
+#include <QGraphicsLayout>
 #include <QValueAxis>
 #include <QPen>
 
@@ -28,14 +29,14 @@ IndicatorPanel::IndicatorPanel(Type type, int height, QWidget* parent)
     x_axis_->setFormat("HH:mm");
     x_axis_->setLabelsColor(QColor("#787b86"));
     x_axis_->setGridLineColor(QColor("#2a2e39"));
-    x_axis_->setLinePenVisible(false);
+    x_axis_->setLinePen(new QPen(Qt::NoPen));
     x_axis_->setTickCount(5);
     chart_->addAxis(x_axis_, Qt::AlignBottom);
 
     y_axis_ = new QValueAxis();
     y_axis_->setLabelsColor(QColor("#787b86"));
     y_axis_->setGridLineColor(QColor("#2a2e39"));
-    y_axis_->setLinePenVisible(false);
+    y_axis_->setLinePen(new QPen(Qt::NoPen));
     chart_->addAxis(y_axis_, Qt::AlignRight);
 
     switch (type) {
