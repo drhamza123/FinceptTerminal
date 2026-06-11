@@ -1080,15 +1080,43 @@ void CryptoChart::place_drawing(const QPointF& chart_pos) {
 // ── HoverChartView drawing mouse handlers ────────────────────────
 
 void HoverChartView::mousePressEvent(QMouseEvent* e) {
-    if (host_ && host_->active_draw_tool_ >= 0 && host_->draw_placing_) {
-        QPointF chart_pt = host_->chart_->mapToValue(e->pos());
-        host_->place_drawing(chart_pt);
-        return;
+    if (host_) {
+        if (host_->active_draw_tool_ >= 0 && host_->draw_placing_) {
+            QPointF chart_pt = host_->chart_->mapToValue(e->pos());
+            host_->place_drawing(chart_pt);
+            return;
+        }
+        // Forward to position layer for drag-to-adjust
+        if (host_->position_layer_) {
+            QPointF chart_pt = host_->chart_->mapToValue(e->pos());
+            host_->position_layer_->on_mouse_press(chart_pt, e->pos());
+            if (host_->position_layer_->is_dragging())
+                return;
+        }
     }
     QChartView::mousePressEvent(e);
 }
 
+void HoverChartView::mouseMoveEvent(QMouseEvent* e) {
+    if (host_) {
+        if (host_->position_layer_ && host_->position_layer_->is_dragging()) {
+            QPointF chart_pt = host_->chart_->mapToValue(e->pos());
+            host_->position_layer_->on_mouse_move(chart_pt);
+            return;
+        }
+        const QPointF chart_pos = host_->chart_->mapToValue(e->pos());
+        host_->on_hover_position(chart_pos, e->pos());
+    }
+    QChartView::mouseMoveEvent(e);
+}
+
 void HoverChartView::mouseReleaseEvent(QMouseEvent* e) {
+    if (host_ && host_->position_layer_) {
+        if (host_->position_layer_->is_dragging()) {
+            host_->position_layer_->on_mouse_release();
+            return;
+        }
+    }
     QChartView::mouseReleaseEvent(e);
 }
 

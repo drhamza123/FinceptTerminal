@@ -47,7 +47,22 @@ public:
     void set_positions(const QVector<PositionLevel>& positions);
     const QVector<PositionLevel>& positions() const { return positions_; }
 
+    // Drag-to-adjust support
+    void on_mouse_press(const QPointF& chart_pos, const QPoint& view_pos);
+    void on_mouse_move(const QPointF& chart_pos);
+    void on_mouse_release();
+    bool is_dragging() const { return drag_active_; }
+
+signals:
+    void sl_tp_changed(const QString& position_id, double new_sl, double new_tp);
+
 private:
+    int hit_test(const QPointF& view_pos) const;  // returns item index or -1
+    enum DragTarget { None, EntryLine, SLLine, TPPLine };
+    DragTarget drag_target_ = None;
+    int drag_index_ = -1;
+    bool drag_active_ = false;
+    double drag_start_y_ = 0;
     void rebuild_items();
     void clear_items();
 

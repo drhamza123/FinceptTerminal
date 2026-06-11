@@ -215,4 +215,95 @@ void PositionLayer::clear_items() {
     items_.clear();
 }
 
+int PositionLayer::hit_test(const QPointF& view_pos) const {
+    if (!chart_) return -1;
+    const qreal threshold = 6; // pixels
+    for (int i = 0; i < items_.size() && i < positions_.size(); ++i) {
+        auto check_line = [&](QGraphicsLineItem* line, qreal& out_y) -> bool {
+            if (!line || !line->isVisible()) return false;
+            QLineF l = line->line();
+            qreal dy = std::abs(view_pos.y() - l.y1());
+            if (dy < threshold && view_pos.x() >= l.x1() && view_pos.x() <= l.x2()) {
+                out_y = l.y1();
+                return true;
+            }
+            return false;
+        };
+        qreal y;
+        if (check_line(items_[i].sl_line, y)) { drag_target_ = SLLine; drag_index_ = i; return i; }
+        if (check_line(items_[i].tp_line, y)) { drag_target_ = TPPLine; drag_index_ = i; return i; }
+        if (check_line(items_[i].entry_line, y)) { drag_target_ = EntryLine; drag_index_ = i; return i; }
+    }
+    return -1;
+}
+
+void PositionLayer::on_mouse_press(const QPointF& chart_pos, const QPoint& view_pos) {
+    Q_UNUSED(chart_pos)
+    drag_active_ = false;
+    drag_target_ = None;
+    drag_index_ = -1;
+
+    if (hit_test(view_pos) >= 0) {
+        drag_active_ = true;
+        drag_start_y_ = view_pos.y();
+    }
+}
+
+void PositionLayer::on_mouse_move(const QPointF& chart_pos) {
+    if (!drag_active_ || !chart_ || drag_index_ < 0 || drag_index_ >= positions_.size())
+        return;
+
+    auto set_line_y = [&](QGraphicsLineItem* line, qreal y) {
+        if (!line) return;
+        QRectF plot = chart_->plotArea();
+        line->setLine(plot.left(), y, plot.right(), y);
+    };
+
+    qreal new_y = chart_->mapToPosition(chart_pos).y();
+
+    switch (drag_target_) {
+    case SLLine:
+        set_line_y(items_[drag_index_].sl_line, new_y);
+        break;
+    case TPPLine:
+        set_line_y(items_[drag_index_].tp_line, new_y);
+        break;
+    case EntryLine:
+        set_line_y(items_[drag_index_].entry_line, new_y);
+        break;
+    default:
+        break;
+    }
+}
+
+void PositionLayer::on_mouse_release() {
+    if (!drag_active_ || !chart_ || drag_index_ < 0 || drag_index_ >= positions_.size()) {
+        drag_active_ = false;
+        return;
+    }
+
+    // Map screen Y back to price
+    auto line_y_to_price = [&](QGraphicsLineItem* line) -> double {
+        if (!line) return 0;
+        qreal y = line->line().y1();
+        return chart_->mapToValue(QPointF(0, y)).y();
+    };
+
+    double new_sl = positions_[drag_index_].stop_loss;
+    double new_tp = positions_[drag_index_].take_profit;
+
+    if (drag_target_ == SLLine) new_sl = line_y_to_price(items_[drag_index_].sl_line);
+    if (drag_target_ == TPPLine) new_tp = line_y_to_price(items_[drag_index_].tp_line);
+
+    // Update the stored position
+    positions_[drag_index_].stop_loss = new_sl;
+    positions_[drag_index_].take_profit = new_tp;
+
+    emit sl_tp_changed(positions_[drag_index_].order_id, new_sl, new_tp);
+
+    // Full reposition to snap positions
+    reposition(chart_);
+    drag_active_ = false;
+}
+
 } // namespace fincept::ui
