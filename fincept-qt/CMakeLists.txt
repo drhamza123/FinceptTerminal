@@ -204,26 +204,37 @@ if(MSGPACK_INCLUDE_DIR)
 else()
     message(FATAL_ERROR "msgpack.hpp not found and could not be downloaded")
 endif()
-find_library(ZMQ_LIB
-    NAMES zmq libzmq
-    HINTS
-        "C:/Users/AHMADP~1/AppData/Local/Temp/opencode/libzmq/lib"
-        "C:/Users/AHMADP~1/AppData/Local/Temp/opencode"
-        "C:/msys64/mingw64/lib"
-        "$ENV{VCPKG_DIR}/lib"
-        "${ZMQ_ROOT_DIR}/lib")
-find_path(ZMQ_INCLUDE_DIR zmq.hpp
-    HINTS
-        "C:/Users/AHMADP~1/AppData/Local/Temp/opencode/cppzmq"
-        "C:/msys64/mingw64/include"
-        "$ENV{VCPKG_DIR}/include"
-        "${ZMQ_ROOT_DIR}/include")
-find_path(ZMQ_C_INCLUDE_DIR zmq.h
-    HINTS
-        "C:/Users/AHMADP~1/AppData/Local/Temp/opencode/libzmq/include"
-        "C:/msys64/mingw64/include"
-        "$ENV{VCPKG_DIR}/include"
-        "${ZMQ_ROOT_DIR}/include")
+# ── ZeroMQ (ultra-low latency MT5 bridge) ──────────────────────────────────
+# Try find_package first (vcpkg provides ZeroMQConfig.cmake), fall back
+# to find_library for manual library paths.
+find_package(ZeroMQ QUIET)
+if(ZeroMQ_FOUND)
+    set(ZMQ_LIB ZeroMQ::ZeroMQ)
+    get_target_property(ZMQ_INCLUDE_DIR ZeroMQ::ZeroMQ INTERFACE_INCLUDE_DIRECTORIES)
+    get_target_property(ZMQ_C_INCLUDE_DIR ZeroMQ::ZeroMQ INTERFACE_INCLUDE_DIRECTORIES)
+    message(STATUS "ZMQ found via ZeroMQConfig")
+else()
+    find_library(ZMQ_LIB
+        NAMES zmq libzmq libzmq-mt libzmq-mt-4_3_5 libzmq-mt-4_3_4 libzmq-mt-4_3_3
+        HINTS
+            "C:/Users/AHMADP~1/AppData/Local/Temp/opencode/libzmq/lib"
+            "C:/Users/AHMADP~1/AppData/Local/Temp/opencode"
+            "C:/msys64/mingw64/lib"
+            "$ENV{VCPKG_DIR}/lib"
+            "${ZMQ_ROOT_DIR}/lib")
+    find_path(ZMQ_INCLUDE_DIR zmq.hpp
+        HINTS
+            "C:/Users/AHMADP~1/AppData/Local/Temp/opencode/cppzmq"
+            "C:/msys64/mingw64/include"
+            "$ENV{VCPKG_DIR}/include"
+            "${ZMQ_ROOT_DIR}/include")
+    find_path(ZMQ_C_INCLUDE_DIR zmq.h
+        HINTS
+            "C:/Users/AHMADP~1/AppData/Local/Temp/opencode/libzmq/include"
+            "C:/msys64/mingw64/include"
+            "$ENV{VCPKG_DIR}/include"
+            "${ZMQ_ROOT_DIR}/include")
+endif()
 if(ZMQ_LIB)
     add_library(ZMQ::ZMQ UNKNOWN IMPORTED)
     set_target_properties(ZMQ::ZMQ PROPERTIES IMPORTED_LOCATION "${ZMQ_LIB}")
