@@ -50,8 +50,7 @@ app.include_router(support.router)
 app.include_router(marine.router)
 app.include_router(quantlib.router)
 app.include_router(agent.router)
-from app.routers import download as download_router
-app.include_router(download_router.router)
+
 app.include_router(news_ws.router)
 app.include_router(geopolitics.router)
 app.include_router(mt5_bridge.router)
