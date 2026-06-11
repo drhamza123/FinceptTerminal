@@ -1403,6 +1403,8 @@ set(UI_SOURCES
     src/ui/charts/SymbolComparisonLayer.cpp
     src/ui/charts/CorrelationMatrixWidget.cpp
     src/ui/charts/MarketHeatmapWidget.cpp
+    src/ui/charts/StockScreenerWidget.cpp
+    src/ui/charts/MultiChartLink.cpp
     src/ui/drawing/DrawingManager.cpp
     src/ui/drawing/DrawingTypes.cpp
     src/ui/charts/IndicatorPicker.cpp

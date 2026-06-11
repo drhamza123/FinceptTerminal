@@ -1001,6 +1001,7 @@ void CryptoChart::update_last_price_marker() {
 
 void CryptoChart::on_hover_position(const QPointF& chart_value_pos, const QPoint& view_pos) {
     if (!chart_ || candles_.isEmpty()) return;
+    emit crosshair_moved(chart_value_pos.y(), static_cast<qint64>(chart_value_pos.x()));
 
     const QRectF plot = chart_->plotArea();
     if (!plot.contains(view_pos)) {

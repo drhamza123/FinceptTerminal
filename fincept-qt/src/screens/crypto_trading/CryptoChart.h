@@ -69,6 +69,9 @@ class CryptoChart : public QWidget {
   signals:
     void timeframe_changed(const QString& tf);
     void position_sl_tp_changed(const QString& order_id, double new_sl, double new_tp);
+    // Multi-chart sync
+    void crosshair_moved(double price, qint64 time_ms);
+    void chart_synced();
 
   private:
     void rebuild_chart();
