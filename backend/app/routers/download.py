@@ -22,15 +22,15 @@ h1{font-size:28px;font-weight:700;margin-bottom:8px;color:#f59e0b;}
 <div class="card">
 <h1>AI Stock Guardian</h1>
 <p class="sub">Professional trading terminal — Windows x64</p>
-<a class="btn" href="/download/terminal/exe">Download Installer (44 MB)</a>
+<a class="btn" href="/terminal/exe">Download Installer (44 MB)</a>
 <div class="info">Version 4.0.3 &bull; MSVC 2022 &bull; Qt 6.8.3</div>
 </div></body></html>"""
 
-@router.get("/download/terminal", response_class=HTMLResponse)
+@router.get("/terminal", response_class=HTMLResponse)
 async def download_page():
     return HTMLResponse(HTML_PAGE)
 
-@router.get("/download/terminal/exe")
+@router.get("/terminal/exe")
 async def download_exe():
     path = os.path.join(DOWNLOAD_DIR, "AI_Stock_Guardian_Setup.exe")
     if not os.path.exists(path):
