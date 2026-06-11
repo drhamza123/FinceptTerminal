@@ -55,6 +55,8 @@
 #include <QCandlestickSet>
 #include <QChart>
 #include <QChartView>
+#include <QDateTimeEdit>
+#include <QMenu>
 #include <QDateTime>
 #include <QOpenGLWidget>
 #include <QDateTimeAxis>
@@ -281,6 +283,69 @@ CryptoChart::CryptoChart(QWidget* parent) : QWidget(parent) {
     load_layout_btn_->setToolTip("Load chart layout");
     h_layout->addWidget(load_layout_btn_);
 
+    // Fullscreen button
+    fullscreen_btn_ = new QPushButton("⛶");
+    fullscreen_btn_->setObjectName("cryptoTfBtn");
+    fullscreen_btn_->setCursor(Qt::PointingHandCursor);
+    fullscreen_btn_->setToolTip("Fullscreen chart");
+    connect(fullscreen_btn_, &QPushButton::clicked, this, [this]() {
+        fullscreen_ = !fullscreen_;
+        if (fullscreen_) {
+            parent_before_fullscreen_ = parentWidget();
+            setParent(nullptr);
+            showFullScreen();
+        } else {
+            showNormal();
+            if (parent_before_fullscreen_) {
+                setParent(parent_before_fullscreen_);
+                parent_before_fullscreen_ = nullptr;
+            }
+        }
+    });
+    h_layout->addWidget(fullscreen_btn_);
+
+    // Date range picker button
+    date_picker_btn_ = new QPushButton("DATE");
+    date_picker_btn_->setObjectName("cryptoTfBtn");
+    date_picker_btn_->setCursor(Qt::PointingHandCursor);
+    date_picker_btn_->setToolTip("Select date range");
+    connect(date_picker_btn_, &QPushButton::clicked, this, [this]() {
+        if (date_picker_panel_) {
+            date_picker_panel_->setVisible(!date_picker_panel_->isVisible());
+            return;
+        }
+        date_picker_panel_ = new QWidget(this);
+        auto* dl = new QHBoxLayout(date_picker_panel_);
+        dl->setContentsMargins(4, 2, 4, 2);
+        date_from_ = new QDateTimeEdit(QDateTime::currentDateTime().addDays(-30));
+        date_from_->setCalendarPopup(true);
+        date_from_->setDisplayFormat("yyyy-MM-dd");
+        date_to_ = new QDateTimeEdit(QDateTime::currentDateTime());
+        date_to_->setCalendarPopup(true);
+        date_to_->setDisplayFormat("yyyy-MM-dd");
+        auto* apply_btn = new QPushButton("GO");
+        connect(apply_btn, &QPushButton::clicked, this, [this]() {
+            if (date_from_ && date_to_) {
+                emit timeframe_changed("D1");
+            }
+            if (date_picker_panel_) date_picker_panel_->hide();
+        });
+        dl->addWidget(new QLabel("From:"));
+        dl->addWidget(date_from_);
+        dl->addWidget(new QLabel("To:"));
+        dl->addWidget(date_to_);
+        dl->addWidget(apply_btn);
+        indicator_panels_->insertWidget(0, date_picker_panel_);
+    });
+    h_layout->addWidget(date_picker_btn_);
+
+    // Symbol comparison button
+    compare_btn_ = new QPushButton("CMP");
+    compare_btn_->setObjectName("cryptoTfBtn");
+    compare_btn_->setCursor(Qt::PointingHandCursor);
+    compare_btn_->setToolTip("Compare with another symbol");
+    h_layout->addWidget(compare_btn_);
+
     layout_mgr_ = new fincept::ui::ChartLayoutManager(this);
 
     // Kagi toggle
@@ -358,6 +423,28 @@ CryptoChart::CryptoChart(QWidget* parent) : QWidget(parent) {
     auto* macd_btn = ind_btn("MACD", "Moving Average Convergence Divergence");
     auto* stoch_btn = ind_btn("STOCH", "Stochastic Oscillator");
     auto* vol_btn = ind_btn("VOL", "Volume Profile");
+    more_indicators_btn_ = new QPushButton("+");
+    more_indicators_btn_->setObjectName("cryptoTfBtn");
+    more_indicators_btn_->setCursor(Qt::PointingHandCursor);
+    more_indicators_btn_->setToolTip("More indicators");
+    more_indicators_btn_->setFixedWidth(24);
+    auto* indicator_menu = new QMenu(this);
+    auto add_ind_action = [&](const QString& name, int type) {
+        Q_UNUSED(type)
+        auto* act = indicator_menu->addAction(name);
+        connect(act, &QAction::triggered, this, [this, name]() {
+            if (name == "ATR") toggle_extra_panel(atr_panel_, "ATR");
+            else if (name == "OBV") toggle_extra_panel(obv_panel_, "OBV");
+        });
+    };
+    add_ind_action("ATR", 0);
+    add_ind_action("OBV", 1);
+    add_ind_action("ADX", 2);
+    add_ind_action("Ichimoku", 3);
+    connect(more_indicators_btn_, &QPushButton::clicked, this, [this, indicator_menu]() {
+        indicator_menu->popup(more_indicators_btn_->mapToGlobal(QPoint(0, more_indicators_btn_->height())));
+    });
+    h_layout->addWidget(more_indicators_btn_);
 
     h_layout->addStretch();
     layout->addWidget(header);
@@ -391,6 +478,22 @@ CryptoChart::CryptoChart(QWidget* parent) : QWidget(parent) {
         stoch_panel_->setVisible(on);
         if (on && !candles_.isEmpty()) update_indicator_panels();
     });
+
+    // Extra indicator panels (ATR, OBV, ADX)
+    atr_panel_ = new fincept::ui::IndicatorPanel(fincept::ui::IndicatorPanel::RSI, 80);
+    atr_panel_->setObjectName("atrPanel");
+    atr_panel_->setVisible(false);
+    indicator_panels_->addWidget(atr_panel_);
+
+    obv_panel_ = new fincept::ui::IndicatorPanel(fincept::ui::IndicatorPanel::RSI, 80);
+    obv_panel_->setObjectName("obvPanel");
+    obv_panel_->setVisible(false);
+    indicator_panels_->addWidget(obv_panel_);
+
+    adx_panel_ = new fincept::ui::IndicatorPanel(fincept::ui::IndicatorPanel::MACD, 100);
+    adx_panel_->setObjectName("adxPanel");
+    adx_panel_->setVisible(false);
+    indicator_panels_->addWidget(adx_panel_);
 
     // Volume Profile widget
     vol_profile_panel_ = new fincept::screens::VolumeProfileLayer(this);
@@ -593,6 +696,29 @@ void CryptoChart::update_indicator_panels() {
         auto stoch = fincept::trading::IndicatorCalculator::stochastic(candles_);
         stoch_panel_->set_stoch_data(timestamps, stoch.k, stoch.d);
     }
+
+    if (atr_panel_ && atr_panel_->isVisible()) {
+        auto atr = fincept::trading::IndicatorCalculator::atr(candles_);
+        atr_panel_->set_data(timestamps, atr.values);
+    }
+    if (obv_panel_ && obv_panel_->isVisible()) {
+        auto obv = fincept::trading::IndicatorCalculator::obv(candles_);
+        obv_panel_->set_data(timestamps, obv.values);
+    }
+    if (adx_panel_ && adx_panel_->isVisible()) {
+        auto adx = fincept::trading::IndicatorCalculator::adx(candles_);
+        QVector<double> main_values(timestamps.size(), 0);
+        for (int i = 0; i < timestamps.size() && i < adx.adx.size(); ++i)
+            main_values[i] = adx.adx[i];
+        adx_panel_->set_data(timestamps, main_values);
+    }
+}
+
+void CryptoChart::toggle_extra_panel(fincept::ui::IndicatorPanel* panel, const QString& name) {
+    if (!panel) return;
+    bool on = !panel->isVisible();
+    panel->setVisible(on);
+    if (on && !candles_.isEmpty()) update_indicator_panels();
 }
 
 void CryptoChart::update_volume_profile() {
@@ -791,6 +917,12 @@ void CryptoChart::update_axes(double min_price, double max_price, qint64 min_tim
             macd_panel_->update_x_range(min_time, effective_max);
         if (stoch_panel_ && stoch_panel_->isVisible())
             stoch_panel_->update_x_range(min_time, effective_max);
+        if (atr_panel_ && atr_panel_->isVisible())
+            atr_panel_->update_x_range(min_time, effective_max);
+        if (obv_panel_ && obv_panel_->isVisible())
+            obv_panel_->update_x_range(min_time, effective_max);
+        if (adx_panel_ && adx_panel_->isVisible())
+            adx_panel_->update_x_range(min_time, effective_max);
     }
 }
 

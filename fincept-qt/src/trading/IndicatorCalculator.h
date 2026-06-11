@@ -25,6 +25,28 @@ struct StochResult {
     QVector<double> d;  // slow %D
 };
 
+struct IchimokuResult {
+    QVector<double> tenkan;
+    QVector<double> kijun;
+    QVector<double> senkou_a;
+    QVector<double> senkou_b;
+    QVector<double> chikou;
+};
+
+struct AtrResult {
+    QVector<double> values;
+};
+
+struct AdxResult {
+    QVector<double> adx;
+    QVector<double> plus_di;
+    QVector<double> minus_di;
+};
+
+struct ObvResult {
+    QVector<double> values;
+};
+
 struct VolumeProfileResult {
     double price_low = 0;
     double price_high = 0;
@@ -212,6 +234,86 @@ struct IndicatorCalculator {
         vp.vah = vp.price_low + (va_high + 1) * bin_size;
 
         return vp;
+    }
+};
+
+    static IchimokuResult ichimoku(const QVector<Candle>& candles) {
+        IchimokuResult r;
+        int n = candles.size();
+        if (n < 52) return r;
+        r.tenkan.resize(n); r.kijun.resize(n);
+        r.senkou_a.resize(n); r.senkou_b.resize(n);
+        r.chikou.resize(n);
+        auto highest = [&](int start, int len) {
+            double h = -1e18;
+            for (int i = start; i < start + len && i < n; ++i) h = std::max(h, candles[i].high);
+            return h;
+        };
+        auto lowest = [&](int start, int len) {
+            double l = 1e18;
+            for (int i = start; i < start + len && i < n; ++i) l = std::min(l, candles[i].low);
+            return l;
+        };
+        for (int i = 0; i < n; ++i) {
+            r.tenkan[i] = i >= 8 ? (highest(i-8,9)+lowest(i-8,9))/2.0 : 0;
+            r.kijun[i] = i >= 25 ? (highest(i-25,26)+lowest(i-25,26))/2.0 : 0;
+            r.senkou_a[i] = i >= 25 ? (r.tenkan[i]+r.kijun[i])/2.0 : 0;
+            r.senkou_b[i] = i >= 51 ? (highest(i-51,52)+lowest(i-51,52))/2.0 : 0;
+            r.chikou[i] = i+26 < n ? candles[i+26].close : 0;
+        }
+        return r;
+    }
+
+    static AtrResult atr(const QVector<Candle>& candles, int period = 14) {
+        AtrResult r;
+        int n = candles.size(); if (n < period+1) return r;
+        r.values.resize(n);
+        for (int i = 1; i < n; ++i) {
+            double hl = candles[i].high - candles[i].low;
+            double hc = std::abs(candles[i].high - candles[i-1].close);
+            double lc = std::abs(candles[i].low - candles[i-1].close);
+            double tr = std::max({hl, hc, lc});
+            r.values[i] = (i <= period) ? (i==1 ? tr : (r.values[i-1]*(period-1)+tr)/period)
+                                        : (r.values[i-1]*(period-1)+tr)/period;
+        }
+        return r;
+    }
+
+    static ObvResult obv(const QVector<Candle>& candles) {
+        ObvResult r; int n = candles.size(); if (n < 2) return r;
+        r.values.resize(n); r.values[0] = 0;
+        for (int i = 1; i < n; ++i) {
+            if (candles[i].close > candles[i-1].close) r.values[i] = r.values[i-1] + candles[i].volume;
+            else if (candles[i].close < candles[i-1].close) r.values[i] = r.values[i-1] - candles[i].volume;
+            else r.values[i] = r.values[i-1];
+        }
+        return r;
+    }
+
+    static AdxResult adx(const QVector<Candle>& candles, int period = 14) {
+        AdxResult r; int n = candles.size(); if (n < period*2) return r;
+        r.adx.resize(n); r.plus_di.resize(n); r.minus_di.resize(n);
+        QVector<double> tr(n,0), pdm(n,0), mdm(n,0);
+        for (int i = 1; i < n; ++i) {
+            tr[i] = std::max({candles[i].high-candles[i].low, std::abs(candles[i].high-candles[i-1].close), std::abs(candles[i].low-candles[i-1].close)});
+            double up = candles[i].high-candles[i-1].high, dn = candles[i-1].low-candles[i].low;
+            pdm[i] = (up>dn&&up>0)?up:0; mdm[i] = (dn>up&&dn>0)?dn:0;
+        }
+        QVector<double> sp(n,0), sm(n,0);
+        for (int i = period; i < n; ++i) {
+            double at = 0, sp_sum = 0, sm_sum = 0;
+            for (int j = i-period+1; j <= i; ++j) { at+=tr[j]; sp_sum+=pdm[j]; sm_sum+=mdm[j]; }
+            sp[i] = 100*sp_sum/at; sm[i] = 100*sm_sum/at;
+        }
+        for (int i = period; i < n; ++i) {
+            double sum = 0;
+            for (int j = i-period+1; j <= i; ++j) {
+                double dx = 100*std::abs(sp[j]-sm[j])/(sp[j]+sm[j]==0?1:sp[j]+sm[j]);
+                sum += dx;
+            }
+            r.adx[i] = sum/period; r.plus_di[i] = sp[i]; r.minus_di[i] = sm[i];
+        }
+        return r;
     }
 };
 

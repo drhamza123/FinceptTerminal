@@ -61,6 +61,7 @@ class CryptoChart : public QWidget {
     QWidget* chartView() const { return chart_view_; }
     void update_indicator_panels();
     void update_volume_profile();
+    void toggle_extra_panel(fincept::ui::IndicatorPanel* panel, const QString& name);
 
   signals:
     void timeframe_changed(const QString& tf);
@@ -139,11 +140,15 @@ class CryptoChart : public QWidget {
 
     friend class HoverChartView;
 
-    // Indicator sub-panels (RSI, MACD, Stochastic)
+    // Indicator sub-panels (RSI, MACD, Stochastic, etc.)
     QVBoxLayout* indicator_panels_ = nullptr;
     fincept::ui::IndicatorPanel* rsi_panel_ = nullptr;
     fincept::ui::IndicatorPanel* macd_panel_ = nullptr;
     fincept::ui::IndicatorPanel* stoch_panel_ = nullptr;
+    fincept::ui::IndicatorPanel* atr_panel_ = nullptr;
+    fincept::ui::IndicatorPanel* obv_panel_ = nullptr;
+    fincept::ui::IndicatorPanel* adx_panel_ = nullptr;
+    QPushButton* more_indicators_btn_ = nullptr;
     class VolumeProfileLayer* vol_profile_widget_ = nullptr;
     fincept::screens::VolumeProfileLayer* vol_profile_panel_ = nullptr;
 
@@ -160,6 +165,19 @@ class CryptoChart : public QWidget {
     // Log scale
     bool log_scale_ = false;
     QPushButton* log_scale_btn_ = nullptr;
+    // Fullscreen
+    QPushButton* fullscreen_btn_ = nullptr;
+    bool fullscreen_ = false;
+    QWidget* parent_before_fullscreen_ = nullptr;
+    // Date range picker
+    QPushButton* date_picker_btn_ = nullptr;
+    class QDateTimeEdit* date_from_ = nullptr;
+    class QDateTimeEdit* date_to_ = nullptr;
+    class QWidget* date_picker_panel_ = nullptr;
+    // Symbol comparison
+    QPushButton* compare_btn_ = nullptr;
+    QVector<QLineSeries*> compare_series_;
+    QStringList compare_symbols_;
     // Screenshot
     QPushButton* screenshot_btn_ = nullptr;
     // Layout save/load
