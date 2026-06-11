@@ -37,6 +37,7 @@
 #include "ui/charts/ChartOverlayManager.h"
 #include "ui/charts/IndicatorPicker.h"
 #include "ui/charts/IndicatorPanel.h"
+#include "screens/algo_trading/VolumeProfileLayer.h"
 #include "ui/charts/layers/EmaLayer.h"
 #include "ui/charts/layers/VwapLayer.h"
 #include "ui/charts/layers/BollingerLayer.h"
@@ -334,6 +335,16 @@ CryptoChart::CryptoChart(QWidget* parent) : QWidget(parent) {
         if (on && !candles_.isEmpty()) update_indicator_panels();
     });
 
+    // Volume Profile widget
+    vol_profile_panel_ = new fincept::screens::VolumeProfileLayer(this);
+    vol_profile_panel_->setVisible(false);
+    vol_profile_panel_->setFixedHeight(100);
+    indicator_panels_->addWidget(vol_profile_panel_);
+    connect(vol_btn, &QPushButton::toggled, this, [this](bool on) {
+        vol_profile_panel_->setVisible(on);
+        if (on && !candles_.isEmpty()) update_volume_profile();
+    });
+
     // ── Chart proper ───────────────────────────────────────────────────────
     chart_ = new QChart;
     chart_->setAnimationOptions(QChart::NoAnimation); // CRITICAL: 0% CPU for static charts
@@ -527,6 +538,17 @@ void CryptoChart::update_indicator_panels() {
     }
 }
 
+void CryptoChart::update_volume_profile() {
+    if (candles_.isEmpty() || !vol_profile_panel_ || !vol_profile_panel_->isVisible())
+        return;
+    QVector<qreal> prices, volumes;
+    for (const auto& c : candles_) {
+        prices.append((c.high + c.low) / 2.0);
+        volumes.append(c.volume);
+    }
+    vol_profile_panel_->setData(prices, volumes);
+}
+
 void CryptoChart::set_active_tf(int idx) {
     for (int i = 0; i < 31; ++i) {
         tf_buttons_[i]->setProperty("active", i == idx);
@@ -551,6 +573,7 @@ void CryptoChart::set_candles(const QVector<trading::Candle>& candles) {
     apply_tf_axis_format();
     update_last_price_marker();
     update_indicator_panels();
+    update_volume_profile();
 
     if (!pending_tf_.isEmpty()) {
         const QString tf = pending_tf_;
@@ -627,6 +650,7 @@ void CryptoChart::append_candle(const trading::Candle& candle) {
     if (!candles_.isEmpty())
         overlay_mgr_->append_candle(fincept::ui::CandleData::from(candles_.last()));
     update_indicator_panels();
+    update_volume_profile();
 }
 
 void CryptoChart::recompute_bounds() {

@@ -60,6 +60,7 @@ class CryptoChart : public QWidget {
     QChart* chart() const { return chart_; }
     QWidget* chartView() const { return chart_view_; }
     void update_indicator_panels();
+    void update_volume_profile();
 
   signals:
     void timeframe_changed(const QString& tf);
@@ -143,7 +144,8 @@ class CryptoChart : public QWidget {
     fincept::ui::IndicatorPanel* rsi_panel_ = nullptr;
     fincept::ui::IndicatorPanel* macd_panel_ = nullptr;
     fincept::ui::IndicatorPanel* stoch_panel_ = nullptr;
-    class VolumeProfileLayer* vol_profile_layer_ = nullptr;
+    class VolumeProfileLayer* vol_profile_widget_ = nullptr;
+    fincept::screens::VolumeProfileLayer* vol_profile_panel_ = nullptr;
 
     // Chart type mode (0=candlestick, 1=renko, 2=kagi, 3=pnf)
     int chart_mode_ = 0;
