@@ -304,6 +304,52 @@ CryptoChart::CryptoChart(QWidget* parent) : QWidget(parent) {
     });
     h_layout->addWidget(fullscreen_btn_);
 
+    // Correlation / Heatmap / Screener buttons
+    auto* tools_menu = new QPushButton("⚙");
+    tools_menu->setObjectName("cryptoTfBtn");
+    tools_menu->setCursor(Qt::PointingHandCursor);
+    tools_menu->setToolTip("Tools: Correlation, Heatmap, Screener");
+    tools_menu->setFixedWidth(24);
+    auto* tmenu = new QMenu(this);
+    tmenu->addAction("Correlation Matrix", this, [this]() {
+        if (!corr_widget_) {
+            corr_widget_ = new fincept::ui::CorrelationMatrixWidget(this);
+            corr_widget_->setVisible(false);
+            indicator_panels_->addWidget(corr_widget_);
+        }
+        corr_widget_->setVisible(!corr_widget_->isVisible());
+    });
+    tmenu->addAction("Market Heatmap", this, [this]() {
+        if (!heat_widget_) {
+            heat_widget_ = new fincept::ui::MarketHeatmapWidget(this);
+            heat_widget_->setFixedHeight(200);
+            heat_widget_->setVisible(false);
+            indicator_panels_->addWidget(heat_widget_);
+        }
+        heat_widget_->setVisible(!heat_widget_->isVisible());
+        if (heat_widget_->isVisible()) {
+            QVector<fincept::ui::HeatmapCell> sample;
+            for (auto& s : {"AAPL","MSFT","GOOGL","AMZN","META","TSLA","NVDA","JPM","V","JNJ"}) {
+                sample.append({s, "Tech", (qrand() % 400 - 200) / 10.0, 1e12});
+            }
+            heat_widget_->set_data(sample);
+        }
+    });
+    tmenu->addAction("Stock Screener", this, [this]() {
+        if (!screener_widget_) {
+            screener_widget_ = new fincept::ui::StockScreenerWidget(this);
+            screener_widget_->setVisible(false);
+            indicator_panels_->addWidget(screener_widget_);
+            connect(screener_widget_, &fincept::ui::StockScreenerWidget::symbol_selected,
+                    this, [this](const QString& sym) { /* emit symbol change */ });
+        }
+        screener_widget_->setVisible(!screener_widget_->isVisible());
+    });
+    connect(tools_menu, &QPushButton::clicked, this, [this, tmenu, tools_menu]() {
+        tmenu->popup(tools_menu->mapToGlobal(QPoint(0, tools_menu->height())));
+    });
+    h_layout->addWidget(tools_menu);
+
     // Date range picker button
     date_picker_btn_ = new QPushButton("DATE");
     date_picker_btn_->setObjectName("cryptoTfBtn");

@@ -8,6 +8,10 @@
 #include "ui/charts/IndicatorPanel.h"
 #include "ui/drawing/DrawingManager.h"
 #include "ui/charts/ChartLayoutManager.h"
+#include "ui/charts/CorrelationMatrixWidget.h"
+#include "ui/charts/MarketHeatmapWidget.h"
+#include "ui/charts/StockScreenerWidget.h"
+#include "ui/charts/MultiChartLink.h"
 #include "trading/IndicatorCalculator.h"
 
 #include <QPushButton>
@@ -190,6 +194,10 @@ class CryptoChart : public QWidget {
     QPushButton* save_layout_btn_ = nullptr;
     QPushButton* load_layout_btn_ = nullptr;
     fincept::ui::ChartLayoutManager* layout_mgr_ = nullptr;
+    // Extra tools (correlation, heatmap, screener)
+    fincept::ui::CorrelationMatrixWidget* corr_widget_ = nullptr;
+    fincept::ui::MarketHeatmapWidget* heat_widget_ = nullptr;
+    fincept::ui::StockScreenerWidget* screener_widget_ = nullptr;
 
     // Drawing tools
     QPushButton* draw_toggle_ = nullptr;
