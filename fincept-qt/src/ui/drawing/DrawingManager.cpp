@@ -1,8 +1,13 @@
 #include "ui/drawing/DrawingManager.h"
 
 #include <QChart>
+#include <QDateTime>
+#include <QFont>
 #include <QGraphicsLineItem>
 #include <QGraphicsScene>
+#include <QJsonArray>
+#include <QJsonDocument>
+#include <QJsonObject>
 
 namespace fincept::ui {
 

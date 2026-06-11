@@ -210,7 +210,7 @@ endif()
 find_package(ZeroMQ QUIET)
 if(ZeroMQ_FOUND)
     # vcpkg's ZeroMQ target name varies by version; try the known candidates
-    set(_zmq_targets "ZeroMQ::ZeroMQ" "ZeroMQ::libzmq" "libzmq")
+    set(_zmq_targets "ZeroMQ::ZeroMQ" "ZeroMQ::libzmq" "ZeroMQ::zeromq" "libzmq")
     foreach(_tgt ${_zmq_targets})
         if(TARGET ${_tgt})
             set(ZMQ_LIB ${_tgt})
