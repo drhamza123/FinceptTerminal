@@ -4,6 +4,7 @@
 
 #include "trading/TradingTypes.h"
 #include "ui/charts/ChartOverlayManager.h"
+#include "ui/charts/PositionLayer.h"
 
 #include <QPushButton>
 #include <QVector>
@@ -48,6 +49,7 @@ class CryptoChart : public QWidget {
     void set_candles(const QVector<trading::Candle>& candles);
     void append_candle(const trading::Candle& candle);
     void clear();
+    void update_positions(const QVector<fincept::ui::PositionLevel>& positions);
 
     QString current_timeframe() const;
     fincept::ui::ChartOverlayManager* overlay_manager() const { return overlay_mgr_; }
@@ -126,6 +128,7 @@ class CryptoChart : public QWidget {
 
     fincept::ui::ChartOverlayManager* overlay_mgr_ = nullptr;
     fincept::ui::IndicatorPicker* indicator_picker_ = nullptr;
+    fincept::ui::PositionLayer* position_layer_ = nullptr;
 
     friend class HoverChartView;
 

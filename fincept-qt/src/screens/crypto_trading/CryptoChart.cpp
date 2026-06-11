@@ -420,6 +420,9 @@ CryptoChart::CryptoChart(QWidget* parent) : QWidget(parent) {
     indicator_picker_ = new fincept::ui::IndicatorPicker(overlay_mgr_, this);
     layout->insertWidget(layout->indexOf(chart_view_), indicator_picker_);
 
+    position_layer_ = new fincept::ui::PositionLayer("positions", "Positions", this);
+    overlay_mgr_->add_layer(position_layer_);
+
     connect(indicator_picker_, &fincept::ui::IndicatorPicker::indicator_requested,
             this, [this](const QString& id) {
         using namespace fincept::ui;
@@ -565,6 +568,11 @@ void CryptoChart::recompute_bounds() {
     cached_min_price_ = mn;
     cached_max_price_ = mx;
     bounds_dirty_ = false;
+}
+
+void CryptoChart::update_positions(const QVector<fincept::ui::PositionLevel>& positions) {
+    if (position_layer_)
+        position_layer_->set_positions(positions);
 }
 
 void CryptoChart::clear() {

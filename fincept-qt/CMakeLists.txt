@@ -1373,6 +1373,7 @@ set(UI_SOURCES
     src/ui/charts/OverlayLayer.cpp
     src/ui/charts/SeriesLayer.cpp
     src/ui/charts/HorizontalLineLayer.cpp
+    src/ui/charts/PositionLayer.cpp
     src/ui/charts/ChartOverlayManager.cpp
     src/ui/charts/IndicatorPicker.cpp
     src/ui/charts/IndicatorParamDialog.cpp

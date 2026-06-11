@@ -2,6 +2,7 @@
 #include "screens/equity_trading/AccountManagementDialog.h"
 #include "screens/crypto_trading/CryptoBottomPanel.h"
 #include "screens/crypto_trading/CryptoChart.h"
+#include "ui/charts/PositionLayer.h"
 #include "screens/crypto_trading/CryptoCredentials.h"
 #include "screens/crypto_trading/CryptoOrderBook.h"
 #include "screens/crypto_trading/CryptoOrderEntry.h"
@@ -1452,7 +1453,34 @@ void ExecutionScreen::async_fetch_live_positions() {
     (void)QtConcurrent::run([self]() {
         if (!self) return;
         auto result = ExchangeService::instance().fetch_positions_live(self->selected_symbol_);
-        QMetaObject::invokeMethod(self, [self, result]() { if (!self) return; if (result.contains("positions")) self->bottom_->set_live_positions(result.value("positions").toArray()); self->live_inflight_.fetch_sub(1); }, Qt::QueuedConnection);
+        QMetaObject::invokeMethod(self, [self, result]() {
+            if (!self) return;
+            if (result.contains("positions")) {
+                auto arr = result.value("positions").toArray();
+                self->bottom_->set_live_positions(arr);
+                // Push positions to chart overlay
+                if (self->crypto_chart_) {
+                    QVector<fincept::ui::PositionLevel> pl;
+                    for (const auto& v : arr) {
+                        auto o = v.toObject();
+                        fincept::ui::PositionLevel p;
+                        p.symbol = o.value("symbol").toString();
+                        double amt = o.value("positionAmt").toString().toDouble();
+                        if (o.contains("positionAmt")) amt = o.value("positionAmt").toVariant().toDouble();
+                        p.side = (amt >= 0) ? "long" : "short";
+                        p.quantity = std::abs(amt);
+                        p.entry_price = o.value("entryPrice").toVariant().toDouble();
+                        p.current_price = o.value("markPrice").toVariant().toDouble();
+                        p.pnl = o.value("unRealizedProfit").toVariant().toDouble();
+                        if (o.contains("stopLoss")) p.stop_loss = o.value("stopLoss").toVariant().toDouble();
+                        if (o.contains("takeProfit")) p.take_profit = o.value("takeProfit").toVariant().toDouble();
+                        pl.append(p);
+                    }
+                    self->crypto_chart_->update_positions(pl);
+                }
+            }
+            self->live_inflight_.fetch_sub(1);
+        }, Qt::QueuedConnection);
     });
 }
 
