@@ -66,7 +66,7 @@ void StockScreenerWidget::fetch_data() {
     QJsonObject body;
     body["market"] = market_combo_->currentText().toLower();
     HttpClient::instance().post(url, body, [this](Result<QJsonDocument> result) {
-        if (!result || !result.value().object()["success"].toBool()) return;
+        if (!result.is_ok()) return;
         auto arr = result.value().object()["data"].toObject()["stocks"].toArray();
         data_.clear();
         for (const auto& v : arr) {
