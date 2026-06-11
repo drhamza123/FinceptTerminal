@@ -1393,7 +1393,10 @@ set(UI_SOURCES
     src/ui/charts/SeriesLayer.cpp
     src/ui/charts/HorizontalLineLayer.cpp
     src/ui/charts/PositionLayer.cpp
+    src/ui/charts/IndicatorPanel.cpp
     src/ui/charts/ChartOverlayManager.cpp
+    src/ui/drawing/DrawingManager.cpp
+    src/ui/drawing/DrawingTypes.cpp
     src/ui/charts/IndicatorPicker.cpp
     src/ui/charts/IndicatorParamDialog.cpp
     src/ui/charts/layers/EmaLayer.cpp
