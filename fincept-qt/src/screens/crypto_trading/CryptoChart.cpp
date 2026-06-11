@@ -464,6 +464,8 @@ CryptoChart::CryptoChart(QWidget* parent) : QWidget(parent) {
 
     position_layer_ = new fincept::ui::PositionLayer("positions", "Positions", this);
     overlay_mgr_->add_layer(position_layer_);
+    connect(position_layer_, &fincept::ui::PositionLayer::sl_tp_changed,
+            this, &CryptoChart::position_sl_tp_changed);
 
     connect(indicator_picker_, &fincept::ui::IndicatorPicker::indicator_requested,
             this, [this](const QString& id) {
