@@ -305,8 +305,13 @@ void ExecutionScreen::setup_ui() {
 
         crypto_chart_ = new CryptoChart;
         connect(crypto_chart_, &CryptoChart::position_sl_tp_changed,
-                this, [](const QString&, double, double) {
-            // TODO: wire to broker API for SL/TP update
+                this, [this](const QString& order_id, double new_sl, double new_tp) {
+            QJsonObject body;
+            body["order_id"] = order_id;
+            if (new_sl > 0) body["stop_loss"] = new_sl;
+            if (new_tp > 0) body["take_profit"] = new_tp;
+            QString url = fincept::AppConfig::instance().api_base_url() + "/mt5/order/modify";
+            HttpClient::instance().post(url, body, [](int, const QJsonObject&) {});
         });
         crypto_chart_->hide();
         chart_layout->addWidget(crypto_chart_);
