@@ -151,6 +151,15 @@ class CryptoChart : public QWidget {
     int chart_mode_ = 0;
     QPushButton* chart_mode_btn_ = nullptr;
     void cycle_chart_mode();
+    // Chart style (0=candle, 1=bar, 2=line, 3=area)
+    int chart_style_ = 0;
+    QPushButton* chart_style_btn_ = nullptr;
+    void cycle_chart_style();
+    void apply_chart_style();
+    QLineSeries* line_style_series_ = nullptr;
+    // Log scale
+    bool log_scale_ = false;
+    QPushButton* log_scale_btn_ = nullptr;
 
     // Drawing tools
     QPushButton* draw_toggle_ = nullptr;

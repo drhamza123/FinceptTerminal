@@ -226,6 +226,27 @@ CryptoChart::CryptoChart(QWidget* parent) : QWidget(parent) {
     connect(chart_mode_btn_, &QPushButton::clicked, this, &CryptoChart::cycle_chart_mode);
     h_layout->addWidget(chart_mode_btn_);
 
+    // Chart style button
+    chart_style_btn_ = new QPushButton("CANDLE");
+    chart_style_btn_->setObjectName("cryptoTfBtn");
+    chart_style_btn_->setCursor(Qt::PointingHandCursor);
+    chart_style_btn_->setToolTip("Cycle style: Candle → Bar → Line → Area");
+    connect(chart_style_btn_, &QPushButton::clicked, this, &CryptoChart::cycle_chart_style);
+    h_layout->addWidget(chart_style_btn_);
+
+    // Log scale button
+    log_scale_btn_ = new QPushButton("LOG");
+    log_scale_btn_->setObjectName("cryptoTfBtn");
+    log_scale_btn_->setCursor(Qt::PointingHandCursor);
+    log_scale_btn_->setCheckable(true);
+    log_scale_btn_->setToolTip("Toggle logarithmic price scale");
+    connect(log_scale_btn_, &QPushButton::toggled, this, [this](bool on) {
+        log_scale_ = on;
+        price_axis_->setScaleType(on ? QValueAxis::ScaleType::ScaleTypeLogarithmic
+                                     : QValueAxis::ScaleTypeLinear);
+    });
+    h_layout->addWidget(log_scale_btn_);
+
     // Kagi toggle
     kagi_toggle_ = new QPushButton("KAGI");
     kagi_toggle_->setObjectName("cryptoTfBtn");
@@ -679,6 +700,7 @@ void CryptoChart::update_positions(const QVector<fincept::ui::PositionLevel>& po
 void CryptoChart::clear() {
     candles_.clear();
     series_->clear();
+    if (line_style_series_) line_style_series_->clear();
     if (last_price_line_) last_price_line_->clear();
     cached_min_price_ = cached_max_price_ = -1;
     bounds_dirty_ = true;
@@ -744,6 +766,7 @@ void CryptoChart::apply_tf_axis_format() {
 
 void CryptoChart::rebuild_chart() {
     series_->clear();
+    if (line_style_series_) line_style_series_->clear();
     last_min_price_ = last_max_price_ = -1;
     last_min_time_ = last_max_time_ = -1;
     cached_min_price_ = cached_max_price_ = -1;
@@ -1026,6 +1049,38 @@ void CryptoChart::cycle_chart_mode() {
         toggle_kagi();
     } else if (chart_mode_ == 3) {
         toggle_pnf();
+    }
+}
+
+void CryptoChart::cycle_chart_style() {
+    chart_style_ = (chart_style_ + 1) % 4;
+    const char* labels[] = {"CANDLE", "BAR", "LINE", "AREA"};
+    chart_style_btn_->setText(labels[chart_style_]);
+    apply_chart_style();
+}
+
+void CryptoChart::apply_chart_style() {
+    if (!series_ || candles_.isEmpty()) return;
+
+    if (chart_style_ == 0) {
+        series_->show();
+        if (line_style_series_) line_style_series_->hide();
+    } else {
+        series_->hide();
+        if (!line_style_series_) {
+            line_style_series_ = new QLineSeries();
+            line_style_series_->setPen(QPen(QColor("#089981"), 2));
+            chart_->addSeries(line_style_series_);
+            line_style_series_->attachAxis(time_axis_);
+            line_style_series_->attachAxis(price_axis_);
+        }
+        QVector<QPointF> pts;
+        for (int i = 0; i < candles_.size(); ++i) {
+            double val = chart_style_ == 1 ? candles_[i].close : candles_[i].close;
+            pts.append(QPointF(static_cast<qreal>(candles_[i].timestamp), val));
+        }
+        line_style_series_->replace(pts);
+        line_style_series_->show();
     }
 }
 
