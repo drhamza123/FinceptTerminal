@@ -171,10 +171,26 @@ QStringList LlmService::parse_models_response(const QString& provider, const QBy
 }
 
 void LlmService::fetch_models(const QString& provider, const QString& api_key, const QString& base_url) {
-    // No public /models endpoint for fincept — return known list immediately.
+    // Guardian AI (fincept): fetch models from the backend proxy which serves Ollama models.
     if (provider.toLower() == "fincept") {
-        emit models_fetched(provider,
-                            {"MiniMax-M2.7", "MiniMax-M2.7-highspeed", "MiniMax-M2.5", "MiniMax-M2.5-highspeed"}, {});
+        QString api_url = base_url.isEmpty() ? fincept::AppConfig::instance().api_base_url() : base_url;
+        if (api_url.isEmpty()) api_url = "http://64.235.61.6:8155";
+        QString url = api_url + "/llm/models";
+        if (!models_nam_) models_nam_ = new QNetworkAccessManager(this);
+        QNetworkRequest req{QUrl(url)};
+        req.setAttribute(QNetworkRequest::RedirectPolicyAttribute, QNetworkRequest::NoLessSafeRedirectPolicy);
+        QNetworkReply* reply = models_nam_->get(req);
+        reply->setProperty("_provider", provider);
+        connect(reply, &QNetworkReply::finished, this, [this, reply, provider]() {
+            reply->deleteLater();
+            QStringList models;
+            if (reply->error() == QNetworkReply::NoError) {
+                auto doc = QJsonDocument::fromJson(reply->readAll());
+                auto arr = doc.object()["data"].toObject()["models"].toArray();
+                for (const auto& m : arr) models.append(m.toObject()["id"].toString());
+            }
+            emit models_fetched(provider, models, {});
+        });
         return;
     }
 
