@@ -305,13 +305,8 @@ void ExecutionScreen::setup_ui() {
 
         crypto_chart_ = new CryptoChart;
         connect(crypto_chart_, &CryptoChart::position_sl_tp_changed,
-                this, [this](const QString& order_id, double new_sl, double new_tp) {
-            // Update SL/TP via exchange API
-            QJsonObject params;
-            params["order_id"] = order_id;
-            if (new_sl > 0) params["stop_loss"] = new_sl;
-            if (new_tp > 0) params["take_profit"] = new_tp;
-            ExchangeService::instance().modify_order(params);
+                this, [](const QString&, double, double) {
+            // TODO: wire to broker API for SL/TP update
         });
         crypto_chart_->hide();
         chart_layout->addWidget(crypto_chart_);
