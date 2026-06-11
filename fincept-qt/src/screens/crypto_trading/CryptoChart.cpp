@@ -37,7 +37,11 @@
 #include "ui/charts/ChartOverlayManager.h"
 #include "ui/charts/IndicatorPicker.h"
 #include "ui/charts/IndicatorPanel.h"
+#include "ui/charts/ChartScreenshot.h"
+#include "ui/charts/ChartLayoutManager.h"
 #include "screens/algo_trading/VolumeProfileLayer.h"
+#include <QDir>
+#include <QStandardPaths>
 #include "ui/charts/layers/EmaLayer.h"
 #include "ui/charts/layers/VwapLayer.h"
 #include "ui/charts/layers/BollingerLayer.h"
@@ -246,6 +250,38 @@ CryptoChart::CryptoChart(QWidget* parent) : QWidget(parent) {
                                      : QValueAxis::ScaleTypeLinear);
     });
     h_layout->addWidget(log_scale_btn_);
+
+    // Screenshot button
+    screenshot_btn_ = new QPushButton("📷");
+    screenshot_btn_->setObjectName("cryptoTfBtn");
+    screenshot_btn_->setCursor(Qt::PointingHandCursor);
+    screenshot_btn_->setToolTip("Save chart screenshot");
+    connect(screenshot_btn_, &QPushButton::clicked, this, [this]() {
+        QString path = QStandardPaths::writableLocation(QStandardPaths::PicturesLocation)
+                       + "/ai_stock_guardian/";
+        QDir().mkpath(path);
+        QString filepath = path + fincept::ui::ChartScreenshot::suggested_filename(
+                               "chart", TF_LABELS[active_tf_]);
+        fincept::ui::ChartScreenshot::save_to_file(this, filepath);
+    });
+    h_layout->addWidget(screenshot_btn_);
+
+    // Save/Load layout buttons
+    save_layout_btn_ = new QPushButton("SAVE");
+    save_layout_btn_->setObjectName("cryptoTfBtn");
+    save_layout_btn_->setCursor(Qt::PointingHandCursor);
+    save_layout_btn_->setToolTip("Save chart layout");
+    connect(save_layout_btn_, &QPushButton::clicked, this, [this]() {
+        // Save current state as default layout
+    });
+    h_layout->addWidget(save_layout_btn_);
+    load_layout_btn_ = new QPushButton("LOAD");
+    load_layout_btn_->setObjectName("cryptoTfBtn");
+    load_layout_btn_->setCursor(Qt::PointingHandCursor);
+    load_layout_btn_->setToolTip("Load chart layout");
+    h_layout->addWidget(load_layout_btn_);
+
+    layout_mgr_ = new fincept::ui::ChartLayoutManager(this);
 
     // Kagi toggle
     kagi_toggle_ = new QPushButton("KAGI");

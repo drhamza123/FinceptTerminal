@@ -160,6 +160,12 @@ class CryptoChart : public QWidget {
     // Log scale
     bool log_scale_ = false;
     QPushButton* log_scale_btn_ = nullptr;
+    // Screenshot
+    QPushButton* screenshot_btn_ = nullptr;
+    // Layout save/load
+    QPushButton* save_layout_btn_ = nullptr;
+    QPushButton* load_layout_btn_ = nullptr;
+    fincept::ui::ChartLayoutManager* layout_mgr_ = nullptr;
 
     // Drawing tools
     QPushButton* draw_toggle_ = nullptr;

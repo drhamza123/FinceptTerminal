@@ -1394,6 +1394,8 @@ set(UI_SOURCES
     src/ui/charts/HorizontalLineLayer.cpp
     src/ui/charts/PositionLayer.cpp
     src/ui/charts/IndicatorPanel.cpp
+    src/ui/charts/ChartScreenshot.cpp
+    src/ui/charts/ChartLayoutManager.cpp
     src/ui/charts/ChartOverlayManager.cpp
     src/ui/drawing/DrawingManager.cpp
     src/ui/drawing/DrawingTypes.cpp
