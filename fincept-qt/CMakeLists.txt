@@ -209,11 +209,23 @@ endif()
 # to find_library for manual library paths.
 find_package(ZeroMQ QUIET)
 if(ZeroMQ_FOUND)
-    set(ZMQ_LIB ZeroMQ::ZeroMQ)
-    get_target_property(ZMQ_INCLUDE_DIR ZeroMQ::ZeroMQ INTERFACE_INCLUDE_DIRECTORIES)
-    get_target_property(ZMQ_C_INCLUDE_DIR ZeroMQ::ZeroMQ INTERFACE_INCLUDE_DIRECTORIES)
-    message(STATUS "ZMQ found via ZeroMQConfig")
-else()
+    # vcpkg's ZeroMQ target name varies by version; try the known candidates
+    set(_zmq_targets "ZeroMQ::ZeroMQ" "ZeroMQ::libzmq" "libzmq")
+    foreach(_tgt ${_zmq_targets})
+        if(TARGET ${_tgt})
+            set(ZMQ_LIB ${_tgt})
+            get_target_property(ZMQ_INCLUDE_DIR ${_tgt} INTERFACE_INCLUDE_DIRECTORIES)
+            get_target_property(ZMQ_C_INCLUDE_DIR ${_tgt} INTERFACE_INCLUDE_DIRECTORIES)
+            break()
+        endif()
+    endforeach()
+    if(NOT ZMQ_LIB)
+        # Fall back to find_library below
+        set(ZeroMQ_FOUND FALSE)
+    endif()
+    message(STATUS "ZMQ found via ZeroMQConfig: target=${ZMQ_LIB}")
+endif()
+if(NOT ZeroMQ_FOUND)
     find_library(ZMQ_LIB
         NAMES zmq libzmq libzmq-mt libzmq-mt-4_3_5 libzmq-mt-4_3_4 libzmq-mt-4_3_3
         HINTS
@@ -236,15 +248,22 @@ else()
             "${ZMQ_ROOT_DIR}/include")
 endif()
 if(ZMQ_LIB)
-    add_library(ZMQ::ZMQ UNKNOWN IMPORTED)
-    set_target_properties(ZMQ::ZMQ PROPERTIES IMPORTED_LOCATION "${ZMQ_LIB}")
-    if(ZMQ_INCLUDE_DIR OR ZMQ_C_INCLUDE_DIR)
-        set_target_properties(ZMQ::ZMQ PROPERTIES INTERFACE_INCLUDE_DIRECTORIES "${ZMQ_INCLUDE_DIR};${ZMQ_C_INCLUDE_DIR}")
+    if(TARGET ${ZMQ_LIB})
+        # ZMQ_LIB is already a CMake target (found via ZeroMQConfig), use it directly
+        set(ZMQ_TARGET ${ZMQ_LIB})
+    else()
+        add_library(ZMQ::ZMQ UNKNOWN IMPORTED)
+        set_target_properties(ZMQ::ZMQ PROPERTIES IMPORTED_LOCATION "${ZMQ_LIB}")
+        if(ZMQ_INCLUDE_DIR OR ZMQ_C_INCLUDE_DIR)
+            set_target_properties(ZMQ::ZMQ PROPERTIES INTERFACE_INCLUDE_DIRECTORIES "${ZMQ_INCLUDE_DIR};${ZMQ_C_INCLUDE_DIR}")
+        endif()
+        set(ZMQ_TARGET ZMQ::ZMQ)
     endif()
 elseif(ZMQ_INCLUDE_DIR)
     # Header-only fallback (cppzmq headers only, libzmq used at runtime)
     add_library(ZMQ::ZMQ INTERFACE IMPORTED)
     set_target_properties(ZMQ::ZMQ PROPERTIES INTERFACE_INCLUDE_DIRECTORIES "${ZMQ_INCLUDE_DIR}")
+    set(ZMQ_TARGET ZMQ::ZMQ)
 endif()
 
 # ── LTO (whole-program optimisation) ─────────────────────────────────────────
@@ -3078,7 +3097,7 @@ target_link_libraries(FinceptTerminal PRIVATE
 )
 
 if(ZMQ_LIB)
-    target_link_libraries(FinceptTerminal PRIVATE ZMQ::ZMQ)
+    target_link_libraries(FinceptTerminal PRIVATE ${ZMQ_TARGET})
 endif()
 
 # SecureStorage no longer needs platform-specific credential frameworks —
