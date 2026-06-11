@@ -6,6 +6,7 @@
 #include "ui/charts/ChartOverlayManager.h"
 #include "ui/charts/PositionLayer.h"
 #include "ui/charts/IndicatorPanel.h"
+#include "ui/drawing/DrawingManager.h"
 #include "trading/IndicatorCalculator.h"
 
 #include <QPushButton>
@@ -159,6 +160,7 @@ class CryptoChart : public QWidget {
     void on_draw_tool_clicked(int tool);
     void clear_drawings();
     void place_drawing(const QPointF& chart_pos);
+    fincept::ui::DrawingManager* drawing_mgr_ = nullptr;
 
     // Volume Footprint + Renko + Position Sizing + Kagi + P&F
     QPushButton* vfp_toggle_ = nullptr;

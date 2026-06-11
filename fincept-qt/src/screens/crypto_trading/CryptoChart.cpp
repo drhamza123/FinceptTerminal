@@ -145,14 +145,6 @@ HoverChartView::HoverChartView(QChart* chart, CryptoChart* host)
     setDragMode(QGraphicsView::NoDrag);
 }
 
-void HoverChartView::mouseMoveEvent(QMouseEvent* e) {
-    if (host_ && chart()) {
-        const QPointF chart_pos = chart()->mapToValue(e->pos());
-        host_->on_hover_position(chart_pos, e->pos());
-    }
-    QChartView::mouseMoveEvent(e);
-}
-
 void HoverChartView::leaveEvent(QEvent* e) {
     if (host_) host_->on_hover_leave();
     QChartView::leaveEvent(e);
@@ -459,6 +451,9 @@ CryptoChart::CryptoChart(QWidget* parent) : QWidget(parent) {
     // --- Overlay engine ---
     overlay_mgr_ = new fincept::ui::ChartOverlayManager(this);
     overlay_mgr_->set_chart(chart_view_->scene(), chart_);
+
+    drawing_mgr_ = new fincept::ui::DrawingManager(this);
+    drawing_mgr_->set_scene_chart(chart_view_->scene(), chart_);
 
     connect(chart_, &QChart::plotAreaChanged, this, [this](const QRectF&) {
         overlay_mgr_->reposition_all();
@@ -1078,6 +1073,29 @@ void CryptoChart::on_draw_tool_clicked(int tool) {
     active_draw_tool_ = tool;
     draw_placing_ = true;
     draw_toggle_->setText("DRAW: ON");
+
+    // Forward to DrawingManager for extended tool set
+    if (drawing_mgr_) {
+        static const fincept::ui::DrawingToolType tool_map[] = {
+            fincept::ui::DrawingToolType::TrendLine,       // 0
+            fincept::ui::DrawingToolType::HorizontalLine,  // 1
+            fincept::ui::DrawingToolType::VerticalLine,    // 2
+            fincept::ui::DrawingToolType::Channel,         // 3
+            fincept::ui::DrawingToolType::Ray,             // 4
+            fincept::ui::DrawingToolType::FibonacciRetrace,// 5
+            fincept::ui::DrawingToolType::FibonacciArc,    // 6
+            fincept::ui::DrawingToolType::GannFan,         // 7
+            fincept::ui::DrawingToolType::GannSquare,      // 8
+            fincept::ui::DrawingToolType::ElliottWave,     // 9
+            fincept::ui::DrawingToolType::AndrewsPitchfork,// 10
+            fincept::ui::DrawingToolType::CycleLine,       // 11
+            fincept::ui::DrawingToolType::TextLabel,       // 12
+        };
+        if (tool >= 0 && tool < 13)
+            drawing_mgr_->set_active_tool(tool_map[tool]);
+        else
+            drawing_mgr_->set_active_tool(fincept::ui::DrawingToolType::None);
+    }
 }
 
 void CryptoChart::clear_drawings() {
@@ -1089,6 +1107,15 @@ void CryptoChart::clear_drawings() {
 }
 
 void CryptoChart::place_drawing(const QPointF& chart_pos) {
+    // Use DrawingManager for extended tools
+    if (drawing_mgr_ && drawing_mgr_->has_active_tool()) {
+        drawing_mgr_->on_mouse_press(chart_pos, QPoint());
+        draw_placing_ = false;
+        active_draw_tool_ = -1;
+        draw_toggle_->setText("DRAW");
+        return;
+    }
+
     if (active_draw_tool_ < 0) return;
     auto* scene = chart_view_->scene();
     if (!scene) return;
@@ -1171,7 +1198,8 @@ void CryptoChart::place_drawing(const QPointF& chart_pos) {
 
 void HoverChartView::mousePressEvent(QMouseEvent* e) {
     if (host_) {
-        if (host_->active_draw_tool_ >= 0 && host_->draw_placing_) {
+        if ((host_->active_draw_tool_ >= 0 && host_->draw_placing_) ||
+             (host_->drawing_mgr_ && host_->drawing_mgr_->has_active_tool())) {
             QPointF chart_pt = host_->chart_->mapToValue(e->pos());
             host_->place_drawing(chart_pt);
             return;
@@ -1192,6 +1220,11 @@ void HoverChartView::mouseMoveEvent(QMouseEvent* e) {
         if (host_->position_layer_ && host_->position_layer_->is_dragging()) {
             QPointF chart_pt = host_->chart_->mapToValue(e->pos());
             host_->position_layer_->on_mouse_move(chart_pt);
+            return;
+        }
+        if (host_->drawing_mgr_ && host_->drawing_mgr_->has_active_tool()) {
+            QPointF chart_pt = host_->chart_->mapToValue(e->pos());
+            host_->drawing_mgr_->on_mouse_move(chart_pt, e->pos());
             return;
         }
         const QPointF chart_pos = host_->chart_->mapToValue(e->pos());
