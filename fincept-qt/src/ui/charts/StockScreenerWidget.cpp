@@ -65,9 +65,9 @@ void StockScreenerWidget::fetch_data() {
     QString url = fincept::AppConfig::instance().api_base_url() + "/market/screener";
     QJsonObject body;
     body["market"] = market_combo_->currentText().toLower();
-    HttpClient::instance().post(url, body, [this](int status, const QJsonObject& resp) {
-        if (status != 200 || !resp["success"].toBool()) return;
-        auto arr = resp["data"].toObject()["stocks"].toArray();
+    HttpClient::instance().post(url, body, [this](Result<QJsonDocument> result) {
+        if (!result || !result.value().object()["success"].toBool()) return;
+        auto arr = result.value().object()["data"].toObject()["stocks"].toArray();
         data_.clear();
         for (const auto& v : arr) {
             auto o = v.toObject();

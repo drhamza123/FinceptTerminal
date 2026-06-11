@@ -311,7 +311,7 @@ void ExecutionScreen::setup_ui() {
             if (new_sl > 0) body["stop_loss"] = new_sl;
             if (new_tp > 0) body["take_profit"] = new_tp;
             QString url = fincept::AppConfig::instance().api_base_url() + "/mt5/order/modify";
-            HttpClient::instance().post(url, body, [](int, const QJsonObject&) {});
+            HttpClient::instance().post(url, body, [](Result<QJsonDocument>) {});
         });
         crypto_chart_->hide();
         chart_layout->addWidget(crypto_chart_);

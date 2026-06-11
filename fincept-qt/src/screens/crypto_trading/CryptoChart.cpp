@@ -57,6 +57,7 @@
 #include <QChartView>
 #include <QDateTimeEdit>
 #include <QMenu>
+#include <QRandomGenerator>
 #include <QDateTime>
 #include <QOpenGLWidget>
 #include <QDateTimeAxis>
@@ -330,7 +331,7 @@ CryptoChart::CryptoChart(QWidget* parent) : QWidget(parent) {
         if (heat_widget_->isVisible()) {
             QVector<fincept::ui::HeatmapCell> sample;
             for (auto& s : {"AAPL","MSFT","GOOGL","AMZN","META","TSLA","NVDA","JPM","V","JNJ"}) {
-                sample.append({s, "Tech", (qrand() % 400 - 200) / 10.0, 1e12});
+                sample.append({s, "Tech", (QRandomGenerator::global()->bounded(400) - 200) / 10.0, 1e12});
             }
             heat_widget_->set_data(sample);
         }

@@ -3,13 +3,9 @@
 #include <QVector>
 #include <cmath>
 #include <algorithm>
+#include "trading/TradingTypes.h"
 
 namespace fincept::trading {
-
-struct Candle {
-    qint64 timestamp = 0;
-    double open = 0, high = 0, low = 0, close = 0, volume = 0;
-};
 
 struct RsiResult { QVector<double> values; int period = 14; };
 
