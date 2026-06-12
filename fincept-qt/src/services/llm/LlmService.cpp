@@ -442,9 +442,11 @@ LlmResponse LlmService::do_request(const QString& user_message, const std::vecto
         req_body = build_gemini_request(user_message, history);
         // Auth via x-goog-api-key header — do NOT append ?key= (would leak into access logs).
     } else if (provider_.toLower() == "fincept") {
-        // Use sync /research/chat (async submit+poll has task-management bugs on some backends)
-        QString url = get_endpoint_url();
-        req_body = build_openai_request(user_message, history, false, true);
+        // Fincept uses two separate endpoints:
+        // Primary response → async (submit + poll, returns richer model output)
+        // Follow-ups (tool results) → sync /research/chat
+        LOG_INFO(kLlmSvcTag, "do_request: routing to fincept_async_request");
+        return fincept_async_request(user_message, history);
     } else {
         req_body = build_openai_request(user_message, history, false, true);
     }
