@@ -1133,7 +1133,7 @@ async def get_quotes(symbols: str = "XAUUSD", user: User | None = Depends(_optio
 
 
 @router.get("/mt5/market/orderbook")
-async def get_orderbook(symbol: str = "XAUUSD", user=Depends(resolve_user)):
+async def get_orderbook(symbol: str = "XAUUSD", user: User | None = Depends(_optional_user)):
     """Return synthetic orderbook for DOM display."""
     if mt5_direct.is_enabled():
         payload = mt5_direct.market_payload(symbol)
@@ -1216,7 +1216,8 @@ async def get_ohlc(symbol: str = "XAUUSD", timeframe: str = "H1", count: int = 1
                 candles.append({
                     "time": (int(datetime.now(timezone.utc).timestamp()) - (count - i) * 3600),
                     "open": round(o, 2), "high": round(h, 2),
-                    "low": round(l, 2), "close": round(c, 2)
+                    "low": round(l, 2), "close": round(c, 2),
+                    "volume": 0, "tick_volume": 0
                 })
                 price = c
             return {"success": True, "data": candles, "source": "synthetic"}
@@ -1235,7 +1236,8 @@ async def get_ohlc(symbol: str = "XAUUSD", timeframe: str = "H1", count: int = 1
                 vol_val   = int(float(row["Volume"]))
                 candles.append({
                     "time": ts, "open": open_val, "high": high_val,
-                    "low": low_val, "close": close_val, "volume": vol_val
+                    "low": low_val, "close": close_val,
+                    "volume": vol_val, "tick_volume": vol_val
                 })
             except Exception as inner_e:
                 logger.warning("Skipping candle at %s: %s", idx, inner_e)

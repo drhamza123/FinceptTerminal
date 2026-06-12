@@ -177,3 +177,4 @@ deepgram-sdk>=3.0,<4.0
 # Windows, NSSpeechSynthesizer on macOS, espeak on Linux — same engines
 # Qt's wrapper would have used.
 pyttsx3>=2.90
+ollama>=0.4

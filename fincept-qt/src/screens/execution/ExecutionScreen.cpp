@@ -1099,13 +1099,10 @@ void ExecutionScreen::on_mt5_creds_clicked() {
         QString local_exe = app_dir + "/local_server.exe";
 
         if (!QFile::exists(worker_exe) || !QFile::exists(local_exe)) {
-            // Fallback to VPS
-            QJsonObject body; body["login"] = login; body["password"] = password; body["server"] = server;
-            HttpClient::instance().post("/mt5/configure", body, [this, dlg](Result<QJsonDocument> r) {
-                if (r.is_ok()) { ws_status_->setText("MT5 configured (VPS)"); mt5_connected_ = true;
-                    QMessageBox::information(dlg, "Success", "MT5 configured on VPS"); dlg->accept(); }
-                else { ws_status_->setText("Failed: " + QString::fromStdString(r.error())); }
-            }, this);
+            ws_status_->setText("mt5_worker.exe or local_server.exe not found in app directory");
+            QMessageBox::warning(dlg, "Local MT5 Required",
+                "MT5 worker files not found.\n\nPlace mt5_worker.exe and local_server.exe next to the app, "
+                "or run them manually:\n  python mt5_worker.py\n  python local_server.py 8157");
             return;
         }
 
